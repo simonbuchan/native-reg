@@ -1,11 +1,6 @@
 const assert = require('assert');
 
-let native: any;
-try {
-  native = require('./build/Release/fastreg.node');
-} catch (e) {
-  native = require('./build/Debug/fastreg.node')
-}
+const native = require('bindings')('reg.node');
 
 // from winreg.h
 export enum HKEY {

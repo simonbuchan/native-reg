@@ -1,13 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var assert = require('assert');
-var native;
-try {
-    native = require('./build/Release/fastreg.node');
-}
-catch (e) {
-    native = require('./build/Debug/fastreg.node');
-}
+var native = require('bindings')('reg.node');
 // from winreg.h
 var HKEY;
 (function (HKEY) {

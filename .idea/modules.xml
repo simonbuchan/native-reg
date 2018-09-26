@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/fastreg.iml" filepath="$PROJECT_DIR$/.idea/fastreg.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/native-reg.iml" filepath="$PROJECT_DIR$/.idea/native-reg.iml" />
     </modules>
   </component>
 </project>

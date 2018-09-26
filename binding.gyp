@@ -1,8 +1,8 @@
 {
   "targets": [
     {
-      "target_name": "fastreg",
-      "sources": [ "fastreg.cc" ],
+      "target_name": "reg",
+      "sources": [ "reg.cc" ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")"
       ]

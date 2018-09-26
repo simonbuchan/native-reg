@@ -1,4 +1,4 @@
-# `fastreg`
+# `native-reg`
 
 In process native module for Windows registry access.
 

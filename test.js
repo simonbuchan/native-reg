@@ -58,7 +58,7 @@ assert.throws(() => {
   reg.queryValue(userEnvKey, 'TEMP');
 }, error => error.win32_error === 6);
 
-const testingSubKey = 'Software\\fastreg-testing-key';
+const testingSubKey = 'Software\\native-reg-testing-key';
 
 const testKey = reg.createKey(reg.HKCU, testingSubKey, reg.Access.ALL_ACCESS);
 const testValueData = Buffer.from('Test Value\0', 'ucs-2');

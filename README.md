@@ -5,7 +5,7 @@ In process native module for Windows registry access.
 ## Example
 
 ```js
-const reg = require('fastreg');
+const reg = require('native-reg');
 
 const key = reg.openKey(
   reg.HKCU,

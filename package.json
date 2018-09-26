@@ -8,8 +8,12 @@
     "registry",
     "native"
   ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
-    "build": "node-gyp rebuild",
+    "build": "npm run gyp-build && npm run tsc-build",
+    "gyp-build": "node-gyp rebuild",
+    "tsc-build": "tsc -p src",
     "test": "node test"
   },
   "dependencies": {
@@ -18,6 +22,7 @@
     "node-gyp": "^3.8.0"
   },
   "devDependencies": {
-    "@types/node": "^10.11.0"
+    "@types/node": "^10.11.0",
+    "typescript": "~3.0.3"
   }
 }

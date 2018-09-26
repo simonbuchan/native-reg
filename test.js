@@ -1,6 +1,6 @@
 const assert = require('assert');
 
-const reg = require('./');
+const reg = require('./lib');
 
 assert(reg.isHKEY(1));
 assert(reg.isHKEY(reg.HKCU));

@@ -15,7 +15,12 @@ const key = reg.openKey(
 const version = reg.getValue(key, 'Install', 'Version');
 
 if (isOldVersion(version)) {
-    reg.deleteTree(key);
+    reg.deleteTree(key, 'Install');
+    
+    const installKey = reg.createKey(key, 'Install', reg.Access.ALL_ACCESS);
+    reg.setValue(installKey, 'Version', newVersion);
+    // ...
+    reg.closeKey(installKey);
 }
 
 reg.closeKey(key);
@@ -74,7 +79,8 @@ export function isHKEY(hkey: any): boolean;
 
 #### `Access`
 
-Specifies access checks for opened or created keys. Not always enforced for opened keys:
+Specifies access checks for opened or created keys. Not always enforced for
+opened keys:
 
 > Certain registry operations perform access checks against the security descriptor of the key, not the access mask specified when the handle to the key was obtained. For example, even if a key is opened with a samDesired of KEY_READ, it can be used to create registry keys if the key's security descriptor permits. In contrast, the RegSetValueEx function specifically requires that the key be opened with the KEY_SET_VALUE access right.
 
@@ -128,8 +134,8 @@ export enum ValueType  {
 
 ### `Value`
 
-Raw registry values returned from [`queryValueRaw`] and [`getValueRaw`] are simply
-Node `Buffer`s with an additional `type` property from `ValueType`
+Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
+are simply Node `Buffer`s with an additional `type` property from `ValueType`:
 
 ```ts
 export type Value = Buffer & { type: ValueType };
@@ -138,7 +144,10 @@ export type Value = Buffer & { type: ValueType };
 ### Raw APIs
 
 These APIs fairly directly wrap the Windows API linked, only abstracting some of
-the allocation and 
+the allocation and general usage style.
+
+The exception is [`enumKeyNames`](#enumkeynames) and [`enumValueNames`](#enumvaluenames)
+which iterate to build a list and only return the names, and not other properties.
 
 #### `createKey`
 
@@ -195,6 +204,8 @@ export function enumValueNames(hkey: HKEY): string[];
 Wraps [`RegQueryValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regqueryvalueexw)
 without additional parsing.
 
+You may want to use [`queryValue`](#queryvalue) instead.
+
 Returns `null` if `valueName` does not exist under `hkey`.
 
 ```ts
@@ -205,6 +216,8 @@ export function queryValueRaw(hkey: HKEY, valueName: string): Value | null;
 
 Wraps [`RegGetValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-reggetvaluew)
 without additional parsing.
+
+You may want to use [`getValue`](#getvalue) instead.
 
 Returns `null` if `subKey` or `valueName` does not exist under `hkey`.
 
@@ -267,12 +280,17 @@ export function closeKey(hkey: HKEY | null | undefined): void;
 
 #### `parseValue`
 
-Returns the JS-native value for a `Value`:
+Returns the JS-native value for common `Value` types:
 - `SZ`, `EXPAND_SZ` -> `string`
 - `BINARY` -> `Buffer`
 - `DWORD` / `DWORD_LITTLE_ENDIAN` -> `number`
 - `DWORD_BIG_ENDIAN` -> `number`
-- `MULTI_SZ` -> `string`
+- `MULTI_SZ` -> `string[]`
+
+Throws if the type is not one of the above!
+
+For convenience, passes through `null` so missing values don't have
+to be specially treated.
 
 ```ts
 export type ParsedValue = number | string | string[] | Buffer;

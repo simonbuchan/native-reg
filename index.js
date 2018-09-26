@@ -43,8 +43,10 @@ var Access;
     Access[Access["ENUMERATE_SUB_KEYS"] = 8] = "ENUMERATE_SUB_KEYS";
     Access[Access["NOTIFY"] = 16] = "NOTIFY";
     Access[Access["CREATE_LINK"] = 32] = "CREATE_LINK";
+    // WOW64. See https://docs.microsoft.com/en-nz/windows/desktop/WinProg64/accessing-an-alternate-registry-view
     Access[Access["WOW64_64KEY"] = 256] = "WOW64_64KEY";
     Access[Access["WOW64_32KEY"] = 512] = "WOW64_32KEY";
+    // Generic rights.
     Access[Access["READ"] = 131097] = "READ";
     Access[Access["WRITE"] = 131078] = "WRITE";
     Access[Access["EXECUTE"] = 131097] = "EXECUTE";
@@ -92,9 +94,10 @@ exports.HKCU = HKEY.CURRENT_USER;
 exports.HKLM = HKEY.LOCAL_MACHINE;
 exports.HKU = HKEY.USERS;
 function isHKEY(hkey) {
-    return typeof hkey === 'number' && hkey > 0 && hkey < 4294967295;
+    return hkey && hkey === (hkey >>> 0); // checks value is a uint32
 }
 exports.isHKEY = isHKEY;
+// Raw APIs
 function createKey(hkey, subKey, access, options) {
     if (options === void 0) { options = 0; }
     assert(isHKEY(hkey));
@@ -113,16 +116,16 @@ function openKey(hkey, subKey, access, options) {
     return native.openKey(hkey, subKey, options, access);
 }
 exports.openKey = openKey;
-function enumKeys(hkey) {
+function enumKeyNames(hkey) {
     assert(isHKEY(hkey));
-    return native.enumKeys(hkey);
+    return native.enumKeyNames(hkey);
 }
-exports.enumKeys = enumKeys;
-function enumValues(hkey) {
+exports.enumKeyNames = enumKeyNames;
+function enumValueNames(hkey) {
     assert(isHKEY(hkey));
-    return native.enumValues(hkey);
+    return native.enumValueNames(hkey);
 }
-exports.enumValues = enumValues;
+exports.enumValueNames = enumValueNames;
 function queryValueRaw(hkey, valueName) {
     assert(isHKEY(hkey));
     assert(typeof valueName === 'string');
@@ -181,35 +184,6 @@ function closeKey(hkey) {
     native.closeKey(hkey);
 }
 exports.closeKey = closeKey;
-function setValueSZ(hkey, valueName, value) {
-    setValueRaw(hkey, valueName, ValueType.SZ, formatString(value));
-}
-exports.setValueSZ = setValueSZ;
-function setValueEXPAND_SZ(hkey, valueName, value) {
-    setValueRaw(hkey, valueName, ValueType.EXPAND_SZ, formatString(value));
-}
-exports.setValueEXPAND_SZ = setValueEXPAND_SZ;
-function setValueMULTI_SZ(hkey, valueName, value) {
-    setValueRaw(hkey, valueName, ValueType.MULTI_SZ, formatMultiString(value));
-}
-exports.setValueMULTI_SZ = setValueMULTI_SZ;
-function setValueDWORD(hkey, valueName, value) {
-    setValueRaw(hkey, valueName, ValueType.DWORD, formatDWORD(value));
-}
-exports.setValueDWORD = setValueDWORD;
-function setValueQWORD(hkey, valueName, value) {
-    setValueRaw(hkey, valueName, ValueType.QWORD, formatQWORD(value));
-}
-exports.setValueQWORD = setValueQWORD;
-function getValue(hkey, subKey, valueName, flags) {
-    if (flags === void 0) { flags = 0; }
-    return parseValue(getValueRaw(hkey, subKey, valueName, flags));
-}
-exports.getValue = getValue;
-function queryValue(hkey, valueName) {
-    return parseValue(queryValueRaw(hkey, valueName));
-}
-exports.queryValue = queryValue;
 function parseValue(value) {
     if (value === null) {
         return null;
@@ -230,6 +204,7 @@ function parseValue(value) {
             return parseMultiString(value);
     }
 }
+exports.parseValue = parseValue;
 function parseString(value) {
     // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
     // Remarks: "The string may not have been stored with the proper terminating null characters"
@@ -264,4 +239,34 @@ function formatQWORD(value) {
     return data;
 }
 exports.formatQWORD = formatQWORD;
+// Formatted APIs
+function setValueSZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.SZ, formatString(value));
+}
+exports.setValueSZ = setValueSZ;
+function setValueEXPAND_SZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.EXPAND_SZ, formatString(value));
+}
+exports.setValueEXPAND_SZ = setValueEXPAND_SZ;
+function setValueMULTI_SZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.MULTI_SZ, formatMultiString(value));
+}
+exports.setValueMULTI_SZ = setValueMULTI_SZ;
+function setValueDWORD(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.DWORD, formatDWORD(value));
+}
+exports.setValueDWORD = setValueDWORD;
+function setValueQWORD(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.QWORD, formatQWORD(value));
+}
+exports.setValueQWORD = setValueQWORD;
+function getValue(hkey, subKey, valueName, flags) {
+    if (flags === void 0) { flags = 0; }
+    return parseValue(getValueRaw(hkey, subKey, valueName, flags));
+}
+exports.getValue = getValue;
+function queryValue(hkey, valueName) {
+    return parseValue(queryValueRaw(hkey, valueName));
+}
+exports.queryValue = queryValue;
 //# sourceMappingURL=index.js.map

@@ -42,9 +42,11 @@ export enum Access {
   NOTIFY              = 0x0010,
   CREATE_LINK         = 0x0020,
 
+  // WOW64. See https://docs.microsoft.com/en-nz/windows/desktop/WinProg64/accessing-an-alternate-registry-view
   WOW64_64KEY         = 0x0100,
   WOW64_32KEY         = 0x0200,
 
+  // Generic rights.
   READ              = 0x2_0019,
   WRITE             = 0x2_0006,
   EXECUTE           = READ,
@@ -95,9 +97,13 @@ export const HKCU = HKEY.CURRENT_USER;
 export const HKLM = HKEY.LOCAL_MACHINE;
 export const HKU = HKEY.USERS;
 
+export type Value = Buffer & { type: ValueType };
+
 export function isHKEY(hkey: any): hkey is HKEY {
-  return typeof hkey === 'number' && hkey > 0 && hkey < 0xFFFF_FFFF;
+  return hkey && hkey === (hkey >>> 0); // checks value is a uint32
 }
+
+// Raw APIs
 
 export function createKey(
   hkey: HKEY,
@@ -125,17 +131,15 @@ export function openKey(
   return native.openKey(hkey, subKey, options, access);
 }
 
-export function enumKeys(hkey: HKEY): string[] {
+export function enumKeyNames(hkey: HKEY): string[] {
   assert(isHKEY(hkey));
-  return native.enumKeys(hkey);
+  return native.enumKeyNames(hkey);
 }
 
-export function enumValues(hkey: HKEY): string[] {
+export function enumValueNames(hkey: HKEY): string[] {
   assert(isHKEY(hkey));
-  return native.enumValues(hkey);
+  return native.enumValueNames(hkey);
 }
-
-export type Value<Type extends ValueType = ValueType> = Buffer & { type: Type };
 
 export function queryValueRaw(hkey: HKEY, valueName: string): Value | null {
   assert(isHKEY(hkey));
@@ -172,19 +176,13 @@ export function setValueRaw(
   native.setValue(hkey, valueName, valueType, data);
 }
 
-export function deleteKey(
-  hkey: HKEY,
-  subKey: string,
-): void {
+export function deleteKey(hkey: HKEY, subKey: string): void {
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteKey(hkey, subKey);
 }
 
-export function deleteTree(
-  hkey: HKEY,
-  subKey: string,
-): void {
+export function deleteTree(hkey: HKEY, subKey: string): void {
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteTree(hkey, subKey);
@@ -201,10 +199,7 @@ export function deleteKeyValue(
   return native.deleteKeyValue(hkey, subKey, valueName);
 }
 
-export function deleteValue(
-  hkey: HKEY,
-  valueName: string,
-): void {
+export function deleteValue(hkey: HKEY, valueName: string): void {
   assert(isHKEY(hkey));
   assert(typeof valueName === 'string');
   return native.deleteValue(hkey, valueName);
@@ -215,6 +210,67 @@ export function closeKey(hkey: HKEY | null | undefined): void {
   assert(isHKEY(hkey));
   native.closeKey(hkey);
 }
+
+// Format helpers
+
+export type ParsedValue = number | string | string[] | Buffer;
+
+export function parseValue(value: Value | null): ParsedValue | null {
+  if (value === null) {
+    return null;
+  }
+  switch (value.type) {
+    default:
+      throw new Error(`Unhandled reg value type: ${value.type}`)
+    case ValueType.SZ:
+    case ValueType.EXPAND_SZ:
+      return parseString(value);
+    case ValueType.BINARY:
+      return value;
+    case ValueType.DWORD_LITTLE_ENDIAN:
+      return value.readUInt32LE(0);
+    case ValueType.DWORD_BIG_ENDIAN:
+      return value.readUInt32BE(0);
+    case ValueType.MULTI_SZ:
+      return parseMultiString(value);
+  }
+}
+
+export function parseString(value: Buffer): string {
+  // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
+  // Remarks: "The string may not have been stored with the proper terminating null characters"
+  if (value.length > 2 && !value[value.length - 2] && !value[value.length - 1]) {
+    value = value.slice(0, -2);
+  }
+  return value.toString('ucs-2');
+}
+
+export function parseMultiString(value: Buffer) {
+  return value.slice(0, -4).toString('ucs-2').split('\0');
+}
+
+export function formatString(value: string): Buffer {
+  return Buffer.from(value + '\0', 'ucs-2')
+}
+
+export function formatMultiString(values: string[]): Buffer {
+  return Buffer.from(values.join('\0') + '\0', 'ucs-2')
+}
+
+export function formatDWORD(value: number): Buffer {
+  const data = Buffer.alloc(4);
+  data.writeUInt32LE(value, 0);
+  return data;
+}
+
+export function formatQWORD(value: number): Buffer {
+  const data = Buffer.alloc(8);
+  data.writeUInt32LE(value & 0xFFFFFFFF, 0);
+  data.writeUInt32LE(value >>> 32, 4);
+  return data;
+}
+
+// Formatted APIs
 
 export function setValueSZ(
   hkey: HKEY,
@@ -256,8 +312,6 @@ export function setValueQWORD(
   setValueRaw(hkey, valueName, ValueType.QWORD, formatQWORD(value));
 }
 
-export type ParsedValue = number | string | string[] | Buffer;
-
 export function getValue(
   hkey: HKEY,
   subKey: string,
@@ -269,59 +323,4 @@ export function getValue(
 
 export function queryValue(hkey: HKEY, valueName: string): ParsedValue | null {
   return parseValue(queryValueRaw(hkey, valueName));
-}
-
-function parseValue(value: Value | null): ParsedValue | null {
-  if (value === null) {
-    return null;
-  }
-  switch (value.type) {
-    default:
-      throw new Error(`Unhandled reg value type: ${value.type}`)
-    case ValueType.SZ:
-    case ValueType.EXPAND_SZ:
-      return parseString(value);
-    case ValueType.BINARY:
-      return value;
-    case ValueType.DWORD_LITTLE_ENDIAN:
-      return value.readUInt32LE(0);
-    case ValueType.DWORD_BIG_ENDIAN:
-      return value.readUInt32BE(0);
-    case ValueType.MULTI_SZ:
-      return parseMultiString(value);
-  }
-}
-
-export function parseString(value: Buffer) {
-  // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
-  // Remarks: "The string may not have been stored with the proper terminating null characters"
-  if (value.length > 2 && !value[value.length - 2] && !value[value.length - 1]) {
-    value = value.slice(0, -2);
-  }
-  return value.toString('ucs-2');
-}
-
-export function parseMultiString(value: Buffer) {
-  return value.slice(0, -4).toString('ucs-2').split('\0');
-}
-
-export function formatString(value: string): Buffer {
-  return Buffer.from(value + '\0', 'ucs-2')
-}
-
-export function formatMultiString(values: string[]): Buffer {
-  return Buffer.from(values.join('\0') + '\0', 'ucs-2')
-}
-
-export function formatDWORD(value: number): Buffer {
-  const data = Buffer.alloc(4);
-  data.writeUInt32LE(value, 0);
-  return data;
-}
-
-export function formatQWORD(value: number): Buffer {
-  const data = Buffer.alloc(8);
-  data.writeUInt32LE(value & 0xFFFFFFFF, 0);
-  data.writeUInt32LE(value >>> 32, 4);
-  return data;
 }

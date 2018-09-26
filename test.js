@@ -2,6 +2,15 @@ const assert = require('assert');
 
 const reg = require('./');
 
+assert(reg.isHKEY(1));
+assert(reg.isHKEY(reg.HKCU));
+assert(reg.isHKEY(reg.HKEY.CURRENT_USER));
+assert(!reg.isHKEY(undefined));
+assert(!reg.isHKEY('HKCU'));
+assert(!reg.isHKEY(0));
+assert(!reg.isHKEY(0.1));
+assert(!reg.isHKEY(Number.MAX_SAFE_INTEGER));
+
 const userEnvKey = reg.openKey(reg.HKCU, 'Environment', reg.Access.ALL_ACCESS);
 assert(reg.isHKEY(userEnvKey));
 console.log('HKCU\\Environment hkey = %O', userEnvKey);
@@ -10,10 +19,10 @@ const hkcuNoSuchKey = reg.openKey(reg.HKLM, 'NoSuchKey', reg.Access.ALL_ACCESS);
 assert.strictEqual(hkcuNoSuchKey, null);
 reg.closeKey(hkcuNoSuchKey);
 
-console.log('HKCU keys: %O', reg.enumKeys(reg.HKCU));
-console.log('HKCU values: %O', reg.enumValues(reg.HKCU));
-console.log('HKCU\\Environment keys: %O', reg.enumKeys(userEnvKey));
-console.log('HKCU\\Environment values: %O', reg.enumValues(userEnvKey));
+console.log('HKCU keys: %O', reg.enumKeyNames(reg.HKCU));
+console.log('HKCU values: %O', reg.enumValueNames(reg.HKCU));
+console.log('HKCU\\Environment keys: %O', reg.enumKeyNames(userEnvKey));
+console.log('HKCU\\Environment values: %O', reg.enumValueNames(userEnvKey));
 
 const envTempQueryValueRaw = reg.queryValueRaw(userEnvKey, 'TEMP');
 assert.strictEqual(envTempQueryValueRaw.type, reg.ValueType.EXPAND_SZ);

@@ -81,7 +81,7 @@ NAN_METHOD(createKey) {
     info.GetReturnValue().Set((uint32_t) reinterpret_cast<size_t>(hSubKey));
 }
 
-NAN_METHOD(enumKeys) {
+NAN_METHOD(enumKeyNames) {
     auto hkey = to_hkey(info[0]);
 
     // Get max key length (in WCHARs, not including \0)
@@ -134,7 +134,7 @@ NAN_METHOD(enumKeys) {
     info.GetReturnValue().Set(result);
 }
 
-NAN_METHOD(enumValues) {
+NAN_METHOD(enumValueNames) {
     auto hkey = to_hkey(info[0]);
 
     // Get max value name length (in WCHARs, not including \0)
@@ -357,8 +357,8 @@ NAN_METHOD(closeKey) {
 NAN_MODULE_INIT(Init) {
     NAN_EXPORT(target, openKey);
     NAN_EXPORT(target, createKey);
-    NAN_EXPORT(target, enumKeys);
-    NAN_EXPORT(target, enumValues);
+    NAN_EXPORT(target, enumKeyNames);
+    NAN_EXPORT(target, enumValueNames);
     NAN_EXPORT(target, queryValue);
     NAN_EXPORT(target, getValue);
     NAN_EXPORT(target, setValue);

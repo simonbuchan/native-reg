@@ -1,7 +1,7 @@
 {
   "name": "native-reg",
   "description": "Native in-process low-level windows registry access.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "repository": "https://github.com/simonbuchan/native-reg",
   "keywords": [
     "windows",

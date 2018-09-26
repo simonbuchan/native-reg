@@ -22,6 +22,34 @@ var HKEY;
     HKEY[HKEY["DYN_DATA"] = 2147483654] = "DYN_DATA";
     HKEY[HKEY["CURRENT_USER_LOCAL_SETTINGS"] = 2147483655] = "CURRENT_USER_LOCAL_SETTINGS";
 })(HKEY = exports.HKEY || (exports.HKEY = {}));
+var CreateKeyOptions;
+(function (CreateKeyOptions) {
+    CreateKeyOptions[CreateKeyOptions["NON_VOLATILE"] = 0] = "NON_VOLATILE";
+    CreateKeyOptions[CreateKeyOptions["VOLATILE"] = 1] = "VOLATILE";
+    CreateKeyOptions[CreateKeyOptions["CREATE_LINK"] = 2] = "CREATE_LINK";
+    CreateKeyOptions[CreateKeyOptions["BACKUP_RESTORE"] = 4] = "BACKUP_RESTORE";
+})(CreateKeyOptions = exports.CreateKeyOptions || (exports.CreateKeyOptions = {}));
+var OpenKeyOptions;
+(function (OpenKeyOptions) {
+    OpenKeyOptions[OpenKeyOptions["OPEN_LINK"] = 8] = "OPEN_LINK";
+})(OpenKeyOptions = exports.OpenKeyOptions || (exports.OpenKeyOptions = {}));
+// from https://docs.microsoft.com/en-nz/windows/desktop/SysInfo/registry-key-security-and-access-rights
+var Access;
+(function (Access) {
+    // Specific rights
+    Access[Access["QUERY_VALUE"] = 1] = "QUERY_VALUE";
+    Access[Access["SET_VALUE"] = 2] = "SET_VALUE";
+    Access[Access["CREATE_SUB_KEY"] = 4] = "CREATE_SUB_KEY";
+    Access[Access["ENUMERATE_SUB_KEYS"] = 8] = "ENUMERATE_SUB_KEYS";
+    Access[Access["NOTIFY"] = 16] = "NOTIFY";
+    Access[Access["CREATE_LINK"] = 32] = "CREATE_LINK";
+    Access[Access["WOW64_64KEY"] = 256] = "WOW64_64KEY";
+    Access[Access["WOW64_32KEY"] = 512] = "WOW64_32KEY";
+    Access[Access["READ"] = 131097] = "READ";
+    Access[Access["WRITE"] = 131078] = "WRITE";
+    Access[Access["EXECUTE"] = 131097] = "EXECUTE";
+    Access[Access["ALL_ACCESS"] = 983103] = "ALL_ACCESS";
+})(Access = exports.Access || (exports.Access = {}));
 // from winnt.h
 var ValueType;
 (function (ValueType) {
@@ -41,6 +69,24 @@ var ValueType;
     ValueType[ValueType["QWORD"] = 11] = "QWORD";
     ValueType[ValueType["QWORD_LITTLE_ENDIAN"] = 11] = "QWORD_LITTLE_ENDIAN";
 })(ValueType = exports.ValueType || (exports.ValueType = {}));
+// From RegGetValue docs
+var GetValueFlags;
+(function (GetValueFlags) {
+    GetValueFlags[GetValueFlags["RT_ANY"] = 65535] = "RT_ANY";
+    GetValueFlags[GetValueFlags["RT_REG_NONE"] = 1] = "RT_REG_NONE";
+    GetValueFlags[GetValueFlags["RT_REG_SZ"] = 2] = "RT_REG_SZ";
+    GetValueFlags[GetValueFlags["RT_REG_EXPAND_SZ"] = 4] = "RT_REG_EXPAND_SZ";
+    GetValueFlags[GetValueFlags["RT_REG_BINARY"] = 8] = "RT_REG_BINARY";
+    GetValueFlags[GetValueFlags["RT_REG_DWORD"] = 16] = "RT_REG_DWORD";
+    GetValueFlags[GetValueFlags["RT_REG_MULTI_SZ"] = 32] = "RT_REG_MULTI_SZ";
+    GetValueFlags[GetValueFlags["RT_REG_QWORD"] = 64] = "RT_REG_QWORD";
+    GetValueFlags[GetValueFlags["RT_DWORD"] = 24] = "RT_DWORD";
+    GetValueFlags[GetValueFlags["RT_QWORD"] = 72] = "RT_QWORD";
+    GetValueFlags[GetValueFlags["NO_EXPAND"] = 268435456] = "NO_EXPAND";
+    // ZEROONFAILURE = 0x20000000, // doesn't make sense here
+    GetValueFlags[GetValueFlags["SUBKEY_WOW6464KEY"] = 65536] = "SUBKEY_WOW6464KEY";
+    GetValueFlags[GetValueFlags["SUBKEY_WOW6432KEY"] = 131072] = "SUBKEY_WOW6432KEY";
+})(GetValueFlags = exports.GetValueFlags || (exports.GetValueFlags = {}));
 exports.HKCR = HKEY.CLASSES_ROOT;
 exports.HKCU = HKEY.CURRENT_USER;
 exports.HKLM = HKEY.LOCAL_MACHINE;
@@ -49,20 +95,125 @@ function isHKEY(hkey) {
     return typeof hkey === 'number' && hkey > 0 && hkey < 4294967295;
 }
 exports.isHKEY = isHKEY;
-function create(hkey, subKey) {
+function createKey(hkey, subKey, access, options) {
+    if (options === void 0) { options = 0; }
     assert(isHKEY(hkey));
     assert(typeof subKey === 'string');
-    return native.create(hkey, subKey);
+    assert(typeof options === 'number');
+    assert(typeof access === 'number');
+    return native.createKey(hkey, subKey, options, access);
 }
-exports.create = create;
-function open(hkey, subKey) {
+exports.createKey = createKey;
+function openKey(hkey, subKey, access, options) {
+    if (options === void 0) { options = 0; }
     assert(isHKEY(hkey));
     assert(typeof subKey === 'string');
-    return native.open(hkey, subKey);
+    assert(typeof options === 'number');
+    assert(typeof access === 'number');
+    return native.openKey(hkey, subKey, options, access);
 }
-exports.open = open;
-function query(hkey, valueName) {
-    var value = queryRaw(hkey, valueName);
+exports.openKey = openKey;
+function enumKeys(hkey) {
+    assert(isHKEY(hkey));
+    return native.enumKeys(hkey);
+}
+exports.enumKeys = enumKeys;
+function enumValues(hkey) {
+    assert(isHKEY(hkey));
+    return native.enumValues(hkey);
+}
+exports.enumValues = enumValues;
+function queryValueRaw(hkey, valueName) {
+    assert(isHKEY(hkey));
+    assert(typeof valueName === 'string');
+    return native.queryValue(hkey, valueName);
+}
+exports.queryValueRaw = queryValueRaw;
+function getValueRaw(hkey, subKey, valueName, flags) {
+    if (flags === void 0) { flags = 0; }
+    assert(isHKEY(hkey));
+    assert(typeof subKey === 'string');
+    assert(typeof valueName === 'string');
+    assert(typeof flags === 'number');
+    if ((flags & GetValueFlags.RT_ANY) === 0) {
+        flags |= GetValueFlags.RT_ANY;
+    }
+    return native.getValue(hkey, subKey, valueName, flags);
+}
+exports.getValueRaw = getValueRaw;
+function setValueRaw(hkey, valueName, valueType, data) {
+    assert(isHKEY(hkey));
+    assert(typeof valueName === 'string');
+    assert(typeof valueType === 'number');
+    assert(Buffer.isBuffer(data));
+    native.setValue(hkey, valueName, valueType, data);
+}
+exports.setValueRaw = setValueRaw;
+function deleteKey(hkey, subKey) {
+    assert(isHKEY(hkey));
+    assert(typeof subKey === 'string');
+    return native.deleteKey(hkey, subKey);
+}
+exports.deleteKey = deleteKey;
+function deleteTree(hkey, subKey) {
+    assert(isHKEY(hkey));
+    assert(typeof subKey === 'string');
+    return native.deleteTree(hkey, subKey);
+}
+exports.deleteTree = deleteTree;
+function deleteKeyValue(hkey, subKey, valueName) {
+    assert(isHKEY(hkey));
+    assert(typeof subKey === 'string');
+    assert(typeof valueName === 'string');
+    return native.deleteKeyValue(hkey, subKey, valueName);
+}
+exports.deleteKeyValue = deleteKeyValue;
+function deleteValue(hkey, valueName) {
+    assert(isHKEY(hkey));
+    assert(typeof valueName === 'string');
+    return native.deleteValue(hkey, valueName);
+}
+exports.deleteValue = deleteValue;
+function closeKey(hkey) {
+    if (hkey == null)
+        return; // nicely handle uninitialized
+    assert(isHKEY(hkey));
+    native.closeKey(hkey);
+}
+exports.closeKey = closeKey;
+function setValueSZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.SZ, formatString(value));
+}
+exports.setValueSZ = setValueSZ;
+function setValueEXPAND_SZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.EXPAND_SZ, formatString(value));
+}
+exports.setValueEXPAND_SZ = setValueEXPAND_SZ;
+function setValueMULTI_SZ(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.MULTI_SZ, formatMultiString(value));
+}
+exports.setValueMULTI_SZ = setValueMULTI_SZ;
+function setValueDWORD(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.DWORD, formatDWORD(value));
+}
+exports.setValueDWORD = setValueDWORD;
+function setValueQWORD(hkey, valueName, value) {
+    setValueRaw(hkey, valueName, ValueType.QWORD, formatQWORD(value));
+}
+exports.setValueQWORD = setValueQWORD;
+function getValue(hkey, subKey, valueName, flags) {
+    if (flags === void 0) { flags = 0; }
+    return parseValue(getValueRaw(hkey, subKey, valueName, flags));
+}
+exports.getValue = getValue;
+function queryValue(hkey, valueName) {
+    return parseValue(queryValueRaw(hkey, valueName));
+}
+exports.queryValue = queryValue;
+function parseValue(value) {
+    if (value === null) {
+        return null;
+    }
     switch (value.type) {
         default:
             throw new Error("Unhandled reg value type: " + value.type);
@@ -79,7 +230,6 @@ function query(hkey, valueName) {
             return parseMultiString(value);
     }
 }
-exports.query = query;
 function parseString(value) {
     // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
     // Remarks: "The string may not have been stored with the proper terminating null characters"
@@ -93,17 +243,25 @@ function parseMultiString(value) {
     return value.slice(0, -4).toString('ucs-2').split('\0');
 }
 exports.parseMultiString = parseMultiString;
-function queryRaw(hkey, valueName) {
-    assert(isHKEY(hkey));
-    assert(typeof valueName === 'string');
-    return native.query(hkey, valueName);
+function formatString(value) {
+    return Buffer.from(value + '\0', 'ucs-2');
 }
-exports.queryRaw = queryRaw;
-function close(hkey) {
-    if (hkey != null) { // not null or undefined
-        assert(isHKEY(hkey));
-        native.close(hkey);
-    }
+exports.formatString = formatString;
+function formatMultiString(values) {
+    return Buffer.from(values.join('\0') + '\0', 'ucs-2');
 }
-exports.close = close;
+exports.formatMultiString = formatMultiString;
+function formatDWORD(value) {
+    var data = Buffer.alloc(4);
+    data.writeUInt32LE(value, 0);
+    return data;
+}
+exports.formatDWORD = formatDWORD;
+function formatQWORD(value) {
+    var data = Buffer.alloc(8);
+    data.writeUInt32LE(value & 0xFFFFFFFF, 0);
+    data.writeUInt32LE(value >>> 32, 4);
+    return data;
+}
+exports.formatQWORD = formatQWORD;
 //# sourceMappingURL=index.js.map

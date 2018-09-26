@@ -30,6 +30,35 @@ reg.closeKey(key);
 
 Read `index.ts` and linked Windows documentation for full details.
 
+### Errors
+
+Any errors that the code throws are standard node `Error`s with a
+minimal message, e.g.: `RegCreateKeyExW failed`, but with an additional
+`win32_error` property added with the Windows error code the API returned.
+
+You can use `net helpmsg ERROR` to get a generic error message for the code:
+
+```
+>net helpmsg 5
+
+Access is denied.
+```
+
+A common error is trying to use Access.ALL_ACCESS for keys you need UAC elevation for:
+
+```js
+let key;
+try {
+  key = reg.openKey(reg.HKLM, 'SOFTWARE\\Microsoft\\Windows', reg.Access.ALL_ACCESS);
+} catch (e) {
+  if (e.win32_error === 5) { // ERROR_ACCESS_DENIED
+    throw new Error('Access Denied');
+  }
+  throw e;
+}
+// ...
+```
+
 ### Constants
 
 This library uses Typescript `enum`s for constants, this generates a
@@ -132,15 +161,6 @@ export enum ValueType  {
 }
 ```
 
-### `Value`
-
-Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
-are simply Node `Buffer`s with an additional `type` property from `ValueType`:
-
-```ts
-export type Value = Buffer & { type: ValueType };
-```
-
 ### Raw APIs
 
 These APIs fairly directly wrap the Windows API linked, only abstracting some of
@@ -148,6 +168,15 @@ the allocation and general usage style.
 
 The exception is [`enumKeyNames`](#enumkeynames) and [`enumValueNames`](#enumvaluenames)
 which iterate to build a list and only return the names, and not other properties.
+
+#### `Value`
+
+Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
+are simply Node `Buffer`s with an additional `type` property from `ValueType`:
+
+```ts
+export type Value = Buffer & { type: ValueType };
+```
 
 #### `createKey`
 
@@ -234,36 +263,44 @@ export function getValueRaw(
 
 Wraps [`RegDeleteKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletekeyw)
 
+Returns true if the key existed before it was deleted.
+
 ```ts
-export function deleteKey(hkey: HKEY, subKey: string): void;
+export function deleteKey(hkey: HKEY, subKey: string): boolean;
 ```
 
 #### `deleteTree`
 
 Wraps [`RegDeleteTreeW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletetreew)
 
+Returns true if the key existed before it was deleted.
+
 ```ts
-export function deleteTree(hkey: HKEY, subKey: string): void;
+export function deleteTree(hkey: HKEY, subKey: string): boolean;
 ```
 
 #### `deleteKeyValue`
 
 Wraps [`RegDeleteKeyValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletekeyvaluew)
 
+Returns true if the value existed before it was deleted.
+
 ```ts
 export function deleteKeyValue(
   hkey: HKEY,
   subKey: string,
   valueName: string,
-): void;
+): boolean;
 ```
 
 #### `deleteValue`
 
 Wraps [`RegDeleteValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletevaluew)
 
+Returns true if the value existed before it was deleted.
+
 ```ts
-export function deleteValue(hkey: HKEY, valueName: string): void;
+export function deleteValue(hkey: HKEY, valueName: string): boolean;
 ```
 
 #### `closeKey`

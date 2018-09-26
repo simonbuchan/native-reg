@@ -302,10 +302,17 @@ NAN_METHOD(deleteTree) {
 
     auto status = RegDeleteTreeW(hkey, subKey.data());
 
+    if (status == ERROR_FILE_NOT_FOUND) {
+        info.GetReturnValue().Set(false);
+        return;
+    }
+
     if (status != ERROR_SUCCESS) {
         throw_win32("RegDeleteTreeW failed", status);
         return;
     }
+
+    info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(deleteKey) {
@@ -314,10 +321,17 @@ NAN_METHOD(deleteKey) {
 
     auto status = RegDeleteKeyW(hkey, subKey.data());
 
+    if (status == ERROR_FILE_NOT_FOUND) {
+        info.GetReturnValue().Set(false);
+        return;
+    }
+
     if (status != ERROR_SUCCESS) {
         throw_win32("RegDeleteKeyW failed", status);
         return;
     }
+
+    info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(deleteKeyValue) {
@@ -327,10 +341,17 @@ NAN_METHOD(deleteKeyValue) {
 
     auto status = RegDeleteKeyValueW(hkey, subKey.data(), valueName.data());
 
+    if (status == ERROR_FILE_NOT_FOUND) {
+        info.GetReturnValue().Set(false);
+        return;
+    }
+
     if (status != ERROR_SUCCESS) {
         throw_win32("RegDeleteKeyValueW failed", status);
         return;
     }
+
+    info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(deleteValue) {
@@ -339,16 +360,24 @@ NAN_METHOD(deleteValue) {
 
     auto status = RegDeleteValueW(hkey, valueName.data());
 
+    if (status == ERROR_FILE_NOT_FOUND) {
+        info.GetReturnValue().Set(false);
+        return;
+    }
+
     if (status != ERROR_SUCCESS) {
         throw_win32("RegDeleteValueW failed", status);
         return;
     }
+
+    info.GetReturnValue().Set(true);
 }
 
 NAN_METHOD(closeKey) {
     auto hkey = to_hkey(info[0]);
     auto status = RegCloseKey(hkey);
-    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+
+    if (status != ERROR_SUCCESS) {
         throw_win32("RegCloseKeyW failed", status);
         return;
     }

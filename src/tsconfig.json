@@ -2,14 +2,12 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "es5",
+    "skipLibCheck": true,
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "../lib",
     "strict": true
-  },
-  "exclude": [
-    "../node_modules"
-  ]
+  }
 }

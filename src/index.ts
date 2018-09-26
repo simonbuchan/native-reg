@@ -171,13 +171,13 @@ export function setValueRaw(
   native.setValue(hkey, valueName, valueType, data);
 }
 
-export function deleteKey(hkey: HKEY, subKey: string): void {
+export function deleteKey(hkey: HKEY, subKey: string): boolean {
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteKey(hkey, subKey);
 }
 
-export function deleteTree(hkey: HKEY, subKey: string): void {
+export function deleteTree(hkey: HKEY, subKey: string): boolean {
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteTree(hkey, subKey);
@@ -187,14 +187,14 @@ export function deleteKeyValue(
   hkey: HKEY,
   subKey: string,
   valueName: string,
-): void {
+): boolean {
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   assert(typeof valueName === 'string');
   return native.deleteKeyValue(hkey, subKey, valueName);
 }
 
-export function deleteValue(hkey: HKEY, valueName: string): void {
+export function deleteValue(hkey: HKEY, valueName: string): boolean {
   assert(isHKEY(hkey));
   assert(typeof valueName === 'string');
   return native.deleteValue(hkey, valueName);
@@ -216,7 +216,7 @@ export function parseValue(value: Value | null): ParsedValue | null {
   }
   switch (value.type) {
     default:
-      throw new Error(`Unhandled reg value type: ${value.type}`)
+      throw new Error(`Unhandled reg value type: ${value.type}`);
     case ValueType.SZ:
     case ValueType.EXPAND_SZ:
       return parseString(value);

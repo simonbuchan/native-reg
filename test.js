@@ -11,9 +11,13 @@ assert(!reg.isHKEY(0));
 assert(!reg.isHKEY(0.1));
 assert(!reg.isHKEY(Number.MAX_SAFE_INTEGER));
 
+assert.throws(() => {
+  reg.openKey('HKCU', 'Environment', reg.Access.ALL_ACCESS);
+}, (error) => error instanceof assert.AssertionError);
+
 const userEnvKey = reg.openKey(reg.HKCU, 'Environment', reg.Access.ALL_ACCESS);
-assert(reg.isHKEY(userEnvKey));
 console.log('HKCU\\Environment hkey = %O', userEnvKey);
+assert(reg.isHKEY(userEnvKey));
 
 const hkcuNoSuchKey = reg.openKey(reg.HKLM, 'NoSuchKey', reg.Access.ALL_ACCESS);
 assert.strictEqual(hkcuNoSuchKey, null);
@@ -56,7 +60,7 @@ reg.closeKey(userEnvKey);
 
 assert.throws(() => {
   reg.queryValue(userEnvKey, 'TEMP');
-}, error => error.win32_error === 6);
+}, error => error.errno === 6 && error.syscall === 'RegQueryValueExW');
 
 const testingSubKey = 'Software\\native-reg-testing-key';
 

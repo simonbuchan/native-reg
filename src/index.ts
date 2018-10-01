@@ -1,4 +1,5 @@
 const assert = require('assert');
+const { types } = require('util');
 
 const native = require('bindings')('reg.node');
 
@@ -95,7 +96,7 @@ export const HKU = HKEY.USERS;
 export type Value = Buffer & { type: ValueType };
 
 export function isHKEY(hkey: any): hkey is HKEY {
-  return hkey && hkey === (hkey >>> 0); // checks value is a uint32
+  return types.isExternal(hkey) || hkey && hkey === (hkey >>> 0); // checks value is a uint32
 }
 
 // Raw APIs
@@ -124,6 +125,17 @@ export function openKey(
   assert(typeof options === 'number');
   assert(typeof access === 'number');
   return native.openKey(hkey, subKey, options, access);
+}
+
+export function openCurrentUser(access: Access = Access.ALL_ACCESS): HKEY {
+  assert(typeof access === 'number');
+  return native.openCurrentUser(access);
+}
+
+export function loadAppKey(file: string, access: Access): HKEY | null {
+  assert(typeof file === 'string');
+  assert(typeof access === 'number');
+  return native.loadAppKey(file, access);
 }
 
 export function enumKeyNames(hkey: HKEY): string[] {

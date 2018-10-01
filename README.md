@@ -32,31 +32,34 @@ Read `index.ts` and linked Windows documentation for full details.
 
 ### Errors
 
-Any errors that the code throws are standard node `Error`s with a
-minimal message, e.g.: `RegCreateKeyExW failed`, but with an additional
-`win32_error` property added with the Windows error code the API returned.
-
-You can use `net helpmsg ERROR` to get a generic error message for the code:
-
-```
->net helpmsg 5
-
-Access is denied.
-```
-
-A common error is trying to use Access.ALL_ACCESS for keys you need UAC elevation for:
+The API initially validates the arguments with the standard node `assert` library:
 
 ```js
-let key;
 try {
-  key = reg.openKey(reg.HKLM, 'SOFTWARE\\Microsoft\\Windows', reg.Access.ALL_ACCESS);
+  // Should not be 'HKLM', but reg.HKLM or reg.HKEY.LOCAL_MACHINE
+  reg.openKey('HKLM', 'SOFTWARE\\Microsoft\\Windows', reg.Access.READ);
+  assert.fail();
 } catch (e) {
-  if (e.win32_error === 5) { // ERROR_ACCESS_DENIED
-    throw new Error('Access Denied');
-  }
-  throw e;
+  assert(e instanceof require('assert').AssertionError);
 }
-// ...
+```
+
+If the wrapped Windows API returns an error, with a couple of exceptions for
+commonly non-failure errors (e.g. key does not exist), are thrown as JS `Error`s
+with the generic error message, e.g.: `Access is denied.`, but additional
+standard `errno` and `syscall` properties, for example, a common error is trying
+to use `Access.ALL_ACCESS` on `reg.HKLM`, which you need UAC elevation for:
+
+```js
+try {
+  // Assuming you are not running as administrator!
+  reg.openKey(reg.HKLM, 'SOFTWARE\\Microsoft\\Windows', reg.Access.ALL_ACCESS);
+  assert.fail();
+} catch (e) {
+  assert.strictEqual(e.message, 'Access is denied.');
+  assert.strictEqual(e.errno, 5);
+  assert.strictEqual(e.syscall, 'RegOpenKeyExW');
+}
 ```
 
 ### Constants
@@ -68,8 +71,13 @@ For example: `Access.SET_VALUE` is `0x0002`, and `Access[2]` is `"SET_VALUE"`.
 
 #### `HKEY`
 
-Predefined `HKEY`s. [`createKey`](#createkey) and [`openKey`](#openkey) will return
-other values for `HKEY`s.
+Exports the set of predefined `HKEY`s.
+
+[`createKey`](#createkey), [`openKey`](#openkey), [`loadAppKey`](#loadappkey) and
+[`openCurrentUser`](#opencurrentuser) will return other values for `HKEY`s,
+which at the moment are V8 `External` values, which are essentially opaque native
+pointers. For these values you must call [`closeKey`](#closekey) once you are done to
+clean up.
 
 ```ts
 export enum HKEY {
@@ -182,7 +190,9 @@ export type Value = Buffer & { type: ValueType };
 
 Wraps [`RegCreateKeyExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regcreatekeyexw)
 
-You must call `closeKey` on the result to clean up.
+> Creates the specified registry key. If the key already exists, the function opens it. Note that key names are not case sensitive.
+
+You must call [`closeKey`](#closekey) on the result to clean up.
 
 ```ts
 export function createKey(
@@ -197,9 +207,11 @@ export function createKey(
 
 Wraps [`RegOpenKeyExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regopenkeyexw)
 
+> Opens the specified registry key. Note that key names are not case sensitive.
+
 Returns `null` if `subKey` does not exist under `hkey`.
 
-You must call `closeKey` on the result to clean up.
+You must call [`closeKey`](#closekey) on the result to clean up.
 
 ```ts
 export function openKey(
@@ -210,10 +222,39 @@ export function openKey(
 ): HKEY | null;
 ```
 
+#### `loadAppKey`
+
+Wraps [`RegLoadAppKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regloadappkeyw)
+
+> Loads the specified registry hive as an application hive.
+
+You must call [`closeKey`](#closekey) on the result to clean up.
+
+```ts
+export function loadAppKey(file: string, access: Access): HKEY;
+```
+
+#### `openCurrentUser`
+
+Wraps [`RegOpenCurrentUser`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regopencurrentuser)
+
+> Retrieves a handle to the `HKEY_CURRENT_USER` key for the user the current thread is impersonating.
+
+Only makes sense to use if you have access to Windows user impersonation. Maybe take a look at my
+currently WIP [Windows user account package](https://github.com/simonbuchan/native-users-node).
+
+You must call [`closeKey`](#closekey) on the result to clean up.
+
+```ts
+export function openCurrentUser(access: Access): HKEY;
+```
+
 #### `enumKeyNames`
 
 Wraps [`RegEnumKeyExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regenumkeyexw)
 iterated to get the sub key names for a key.
+
+> Enumerates the subkeys of the specified open registry key.
 
 ```ts
 export function enumKeyNames(hkey: HKEY): string[];
@@ -224,6 +265,8 @@ export function enumKeyNames(hkey: HKEY): string[];
 Wraps [`RegEnumValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regenumvaluew)
 iterated to get the value names for a key.
 
+> Enumerates the values for the specified open registry key.
+
 ```ts
 export function enumValueNames(hkey: HKEY): string[];
 ```
@@ -232,6 +275,8 @@ export function enumValueNames(hkey: HKEY): string[];
 
 Wraps [`RegQueryValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regqueryvalueexw)
 without additional parsing.
+
+> Retrieves the type and data for the specified value name associated with an open registry key.
 
 You may want to use [`queryValue`](#queryvalue) instead.
 
@@ -245,6 +290,8 @@ export function queryValueRaw(hkey: HKEY, valueName: string): Value | null;
 
 Wraps [`RegGetValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-reggetvaluew)
 without additional parsing.
+
+> Retrieves the type and data for the specified registry value.
 
 You may want to use [`getValue`](#getvalue) instead.
 
@@ -263,6 +310,8 @@ export function getValueRaw(
 
 Wraps [`RegDeleteKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletekeyw)
 
+> Deletes a subkey and its values. Note that key names are not case sensitive.
+
 Returns true if the key existed before it was deleted.
 
 ```ts
@@ -273,6 +322,8 @@ export function deleteKey(hkey: HKEY, subKey: string): boolean;
 
 Wraps [`RegDeleteTreeW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletetreew)
 
+> Deletes the subkeys and values of the specified key recursively.
+
 Returns true if the key existed before it was deleted.
 
 ```ts
@@ -282,6 +333,8 @@ export function deleteTree(hkey: HKEY, subKey: string): boolean;
 #### `deleteKeyValue`
 
 Wraps [`RegDeleteKeyValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletekeyvaluew)
+
+> Removes the specified value from the specified registry key and subkey.
 
 Returns true if the value existed before it was deleted.
 
@@ -297,6 +350,8 @@ export function deleteKeyValue(
 
 Wraps [`RegDeleteValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletevaluew)
 
+> Removes a named value from the specified registry key. Note that value names are not case sensitive.
+
 Returns true if the value existed before it was deleted.
 
 ```ts
@@ -306,6 +361,8 @@ export function deleteValue(hkey: HKEY, valueName: string): boolean;
 #### `closeKey`
 
 Wraps [`RegCloseKey`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regclosekey)
+
+> Closes a handle to the specified registry key.
 
 For convenience, `null` or `undefined` values are allowed and ignored.
 

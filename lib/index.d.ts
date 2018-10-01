@@ -75,6 +75,8 @@ export declare type Value = Buffer & {
 export declare function isHKEY(hkey: any): hkey is HKEY;
 export declare function createKey(hkey: HKEY, subKey: string, access: Access, options?: CreateKeyOptions): HKEY;
 export declare function openKey(hkey: HKEY, subKey: string, access: Access, options?: OpenKeyOptions): HKEY | null;
+export declare function openCurrentUser(access?: Access): HKEY;
+export declare function loadAppKey(file: string, access: Access): HKEY | null;
 export declare function enumKeyNames(hkey: HKEY): string[];
 export declare function enumValueNames(hkey: HKEY): string[];
 export declare function queryValueRaw(hkey: HKEY, valueName: string): Value | null;

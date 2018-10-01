@@ -4,33 +4,31 @@
 #include <windows.h>
 #include <vector>
 
-NAN_METHOD(open);
-NAN_METHOD(create);
-NAN_METHOD(close);
-
-auto to_hkey(v8::Local<v8::Value> value) {
+HKEY to_hkey(v8::Local<v8::Value> value) {
+    if (value->IsExternal()) {
+        return static_cast<HKEY>(value.As<v8::External>()->Value());
+    }
     return reinterpret_cast<HKEY>((size_t) value->Uint32Value());
 }
 
-auto to_ucs2(v8::Local<v8::Value> value) {
-    auto encoding = Nan::Encoding::UCS2;
-    std::vector<WCHAR> chars(Nan::DecodeBytes(value, encoding) / sizeof(WCHAR) + 1);
-    Nan::DecodeWrite((char*)chars.data(), chars.size() * sizeof(WCHAR), value, encoding);
-    return chars;
-}
+struct string_value : v8::String::Value {
+    string_value(explicit v8::Local<v8::Value> value)
+#if NODE_MODULE_VERSION >= NODE_8_0_NODE_MODULE_VERSION
+        : v8::String::Value(v8::Isolate::GetCurrent(), value) {}
+#else
+        : v8::String::Value(value) {}
+#endif
 
-void throw_win32(const char* msg, DWORD status) {
-    auto error = Nan::Error(msg);
-    Nan::Set(
-        error.As<v8::Object>(),
-        Nan::New("win32_error").ToLocalChecked().As<v8::Value>(),
-        Nan::New((uint32_t) status));
-    Nan::ThrowError(error);
+    LPWSTR operator*() { return reinterpret_cast<LPWSTR>(this->v8::String::Value::operator *()); }
+};
+
+void throw_win32(DWORD status, const char* syscall) {
+    Nan::ThrowError(node::WinapiErrnoException(v8::Isolate::GetCurrent(), status, syscall));
 }
 
 NAN_METHOD(openKey) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
+    string_value subKey(info[1]);
     auto options = info[2]->Uint32Value();
     auto access = info[3]->Uint32Value();
 
@@ -43,21 +41,19 @@ NAN_METHOD(openKey) {
         &hSubKey);
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().SetNull();
-        return;
+        return info.GetReturnValue().SetNull();
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegOpenKeyExW failed", status);
-        return;
+        return throw_win32(status, "RegOpenKeyExW");
     }
 
-    info.GetReturnValue().Set((uint32_t) reinterpret_cast<size_t>(hSubKey));
+    info.GetReturnValue().Set(Nan::New<v8::External>(hSubKey));
 }
 
 NAN_METHOD(createKey) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
+    string_value subKey(info[1]);
     auto options = info[2]->Uint32Value();
     auto access = info[3]->Uint32Value();
 
@@ -74,11 +70,42 @@ NAN_METHOD(createKey) {
         NULL); // disposition (created / existing)
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegCreateKeyExW failed", status);
-        return;
+        return throw_win32(status, "RegCreateKeyExW");
     }
 
-    info.GetReturnValue().Set((uint32_t) reinterpret_cast<size_t>(hSubKey));
+    info.GetReturnValue().Set(Nan::New<v8::External>(hSubKey));
+}
+
+NAN_METHOD(openCurrentUser) {
+    auto access = info[1]->Uint32Value();
+
+    HKEY hkey = NULL;
+    auto status = RegOpenCurrentUser(access, &hkey);
+
+    if (status != ERROR_SUCCESS) {
+        return throw_win32(status, "RegOpenCurrentUser");
+    }
+
+    info.GetReturnValue().Set(Nan::New<v8::External>(hkey));
+}
+
+NAN_METHOD(loadAppKey) {
+    string_value file(info[0]);
+    auto access = info[1]->Uint32Value();
+
+    HKEY hkey = NULL;
+    auto status = RegLoadAppKeyW(
+        file.data(),
+        &hkey,
+        access,
+        0,
+        0);
+
+    if (status != ERROR_SUCCESS) {
+        return throw_win32(status, "RegLoadAppKeyW");
+    }
+
+    info.GetReturnValue().Set(Nan::New<v8::External>(hkey));
 }
 
 NAN_METHOD(enumKeyNames) {
@@ -100,8 +127,7 @@ NAN_METHOD(enumKeyNames) {
         NULL, // security descriptor size
         NULL); // last write time
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegQueryInfoKeyW failed", status);
-        return;
+        return throw_win32(status, "RegQueryInfoKeyW");
     }
 
     std::vector<uint16_t> data(max_length + 1);
@@ -123,8 +149,7 @@ NAN_METHOD(enumKeyNames) {
             break;
         }
         if (status != ERROR_SUCCESS) {
-            throw_win32("RegEnumKeyExW failed", status);
-            return;
+            return throw_win32(status, "RegEnumKeyExW");
         }
 
         auto item = Nan::New(data.data(), length).ToLocalChecked();
@@ -153,8 +178,7 @@ NAN_METHOD(enumValueNames) {
         NULL, // security descriptor size
         NULL); // last write time
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegQueryInfoKeyW failed", status);
-        return;
+        return throw_win32(status, "RegQueryInfoKeyW");
     }
 
     std::vector<uint16_t> name_data(max_name_length + 1);
@@ -176,8 +200,7 @@ NAN_METHOD(enumValueNames) {
             break;
         }
         if (status != ERROR_SUCCESS) {
-            throw_win32("RegEnumValueW failed", status);
-            return;
+            return throw_win32(status, "RegEnumValueW");
         }
 
         auto item = Nan::New(name_data.data(), name_length).ToLocalChecked();
@@ -189,20 +212,18 @@ NAN_METHOD(enumValueNames) {
 
 NAN_METHOD(queryValue) {
     auto hkey = to_hkey(info[0]);
-    auto valueName = to_ucs2(info[1]);
+    string_value valueName(info[1]);
     DWORD type = 0;
     DWORD size = 0;
     // Query size, type
     auto status = RegQueryValueExW(hkey, valueName.data(), NULL, &type, NULL, &size);
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().SetNull();
-        return;
+        return info.GetReturnValue().SetNull();
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegQueryValueExW failed", status);
-        return;
+        return throw_win32(status, "RegQueryValueExW");
     }
 
     auto data = Nan::NewBuffer(size).ToLocalChecked();
@@ -222,8 +243,8 @@ NAN_METHOD(queryValue) {
 
 NAN_METHOD(getValue) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
-    auto valueName = to_ucs2(info[2]);
+    string_value subKey(info[1]);
+    string_value valueName(info[2]);
     auto flags = info[3]->Uint32Value();
     DWORD type = 0;
     DWORD size = 0;
@@ -238,13 +259,11 @@ NAN_METHOD(getValue) {
         &size);
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().SetNull();
-        return;
+        return info.GetReturnValue().SetNull();
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegGetValueW failed", status);
-        return;
+        return throw_win32(status, "RegGetValueW");
     }
 
     auto data = Nan::NewBuffer(size).ToLocalChecked();
@@ -278,7 +297,7 @@ NAN_METHOD(getValue) {
 
 NAN_METHOD(setValue) {
     auto hkey = to_hkey(info[0]);
-    auto valueName = to_ucs2(info[1]);
+    string_value valueName(info[1]);
     auto valueType = info[2]->Uint32Value();
     auto data = info[3];
 
@@ -291,25 +310,22 @@ NAN_METHOD(setValue) {
         node::Buffer::Length(data));
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegSetValueExW failed", status);
-        return;
+        return throw_win32(status, "RegSetValueExW");
     }
 }
 
 NAN_METHOD(deleteTree) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
+    string_value subKey(info[1]);
 
     auto status = RegDeleteTreeW(hkey, subKey.data());
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().Set(false);
-        return;
+        return info.GetReturnValue().Set(false);
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegDeleteTreeW failed", status);
-        return;
+        return throw_win32(status, "RegDeleteTreeW");
     }
 
     info.GetReturnValue().Set(true);
@@ -317,18 +333,16 @@ NAN_METHOD(deleteTree) {
 
 NAN_METHOD(deleteKey) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
+    string_value subKey(info[1]);
 
     auto status = RegDeleteKeyW(hkey, subKey.data());
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().Set(false);
-        return;
+        return info.GetReturnValue().Set(false);
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegDeleteKeyW failed", status);
-        return;
+        return throw_win32(status, "RegDeleteKeyW");
     }
 
     info.GetReturnValue().Set(true);
@@ -336,19 +350,17 @@ NAN_METHOD(deleteKey) {
 
 NAN_METHOD(deleteKeyValue) {
     auto hkey = to_hkey(info[0]);
-    auto subKey = to_ucs2(info[1]);
-    auto valueName = to_ucs2(info[2]);
+    string_value subKey(info[1]);
+    string_value valueName(info[2]);
 
     auto status = RegDeleteKeyValueW(hkey, subKey.data(), valueName.data());
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().Set(false);
-        return;
+        return info.GetReturnValue().Set(false);
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegDeleteKeyValueW failed", status);
-        return;
+        return throw_win32(status, "RegDeleteKeyValueW");
     }
 
     info.GetReturnValue().Set(true);
@@ -356,18 +368,16 @@ NAN_METHOD(deleteKeyValue) {
 
 NAN_METHOD(deleteValue) {
     auto hkey = to_hkey(info[0]);
-    auto valueName = to_ucs2(info[1]);
+    string_value valueName(info[1]);
 
     auto status = RegDeleteValueW(hkey, valueName.data());
 
     if (status == ERROR_FILE_NOT_FOUND) {
-        info.GetReturnValue().Set(false);
-        return;
+        return info.GetReturnValue().Set(false);
     }
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegDeleteValueW failed", status);
-        return;
+        return throw_win32(status, "RegDeleteValueW");
     }
 
     info.GetReturnValue().Set(true);
@@ -378,14 +388,15 @@ NAN_METHOD(closeKey) {
     auto status = RegCloseKey(hkey);
 
     if (status != ERROR_SUCCESS) {
-        throw_win32("RegCloseKeyW failed", status);
-        return;
+        return throw_win32(status, "RegCloseKeyW");
     }
 }
 
 NAN_MODULE_INIT(Init) {
     NAN_EXPORT(target, openKey);
     NAN_EXPORT(target, createKey);
+    NAN_EXPORT(target, openCurrentUser);
+    NAN_EXPORT(target, loadAppKey);
     NAN_EXPORT(target, enumKeyNames);
     NAN_EXPORT(target, enumValueNames);
     NAN_EXPORT(target, queryValue);

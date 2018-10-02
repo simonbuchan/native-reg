@@ -12,7 +12,7 @@ HKEY to_hkey(v8::Local<v8::Value> value) {
 }
 
 struct string_value : v8::String::Value {
-    string_value(explicit v8::Local<v8::Value> value)
+    explicit string_value(v8::Local<v8::Value> value)
 #if NODE_MODULE_VERSION >= NODE_8_0_NODE_MODULE_VERSION
         : v8::String::Value(v8::Isolate::GetCurrent(), value) {}
 #else
@@ -35,7 +35,7 @@ NAN_METHOD(openKey) {
     HKEY hSubKey = 0;
     auto status = RegOpenKeyExW(
         hkey,
-        subKey.data(),
+        *subKey,
         options,
         access,
         &hSubKey);
@@ -60,7 +60,7 @@ NAN_METHOD(createKey) {
     HKEY hSubKey = 0;
     auto status = RegCreateKeyExW(
         hkey,
-        subKey.data(),
+        *subKey,
         0, // reserved,
         NULL,
         options,
@@ -95,7 +95,7 @@ NAN_METHOD(loadAppKey) {
 
     HKEY hkey = NULL;
     auto status = RegLoadAppKeyW(
-        file.data(),
+        *file,
         &hkey,
         access,
         0,
@@ -216,7 +216,7 @@ NAN_METHOD(queryValue) {
     DWORD type = 0;
     DWORD size = 0;
     // Query size, type
-    auto status = RegQueryValueExW(hkey, valueName.data(), NULL, &type, NULL, &size);
+    auto status = RegQueryValueExW(hkey, *valueName, NULL, &type, NULL, &size);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return info.GetReturnValue().SetNull();
@@ -229,7 +229,7 @@ NAN_METHOD(queryValue) {
     auto data = Nan::NewBuffer(size).ToLocalChecked();
     status = RegQueryValueExW(
         hkey,
-        valueName.data(),
+        *valueName,
         NULL,
         NULL,
         (LPBYTE) node::Buffer::Data(data),
@@ -251,8 +251,8 @@ NAN_METHOD(getValue) {
     // Query size, type
     auto status = RegGetValueW(
         hkey,
-        subKey.data(),
-        valueName.data(),
+        *subKey,
+        *valueName,
         flags,
         &type,
         NULL,
@@ -269,8 +269,8 @@ NAN_METHOD(getValue) {
     auto data = Nan::NewBuffer(size).ToLocalChecked();
     status = RegGetValueW(
         hkey,
-        subKey.data(),
-        valueName.data(),
+        *subKey,
+        *valueName,
         flags,
         NULL,
         node::Buffer::Data(data),
@@ -303,7 +303,7 @@ NAN_METHOD(setValue) {
 
     auto status = RegSetValueExW(
         hkey,
-        valueName.data(),
+        *valueName,
         NULL,
         valueType,
         (const BYTE*) node::Buffer::Data(data),
@@ -318,7 +318,7 @@ NAN_METHOD(deleteTree) {
     auto hkey = to_hkey(info[0]);
     string_value subKey(info[1]);
 
-    auto status = RegDeleteTreeW(hkey, subKey.data());
+    auto status = RegDeleteTreeW(hkey, *subKey);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return info.GetReturnValue().Set(false);
@@ -335,7 +335,7 @@ NAN_METHOD(deleteKey) {
     auto hkey = to_hkey(info[0]);
     string_value subKey(info[1]);
 
-    auto status = RegDeleteKeyW(hkey, subKey.data());
+    auto status = RegDeleteKeyW(hkey, *subKey);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return info.GetReturnValue().Set(false);
@@ -353,7 +353,7 @@ NAN_METHOD(deleteKeyValue) {
     string_value subKey(info[1]);
     string_value valueName(info[2]);
 
-    auto status = RegDeleteKeyValueW(hkey, subKey.data(), valueName.data());
+    auto status = RegDeleteKeyValueW(hkey, *subKey, *valueName);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return info.GetReturnValue().Set(false);
@@ -370,7 +370,7 @@ NAN_METHOD(deleteValue) {
     auto hkey = to_hkey(info[0]);
     string_value valueName(info[1]);
 
-    auto status = RegDeleteValueW(hkey, valueName.data());
+    auto status = RegDeleteValueW(hkey, *valueName);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return info.GetReturnValue().Set(false);

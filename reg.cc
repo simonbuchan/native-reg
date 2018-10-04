@@ -1,412 +1,547 @@
-#include <nan.h>
+#include <napi.h>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <vector>
 
-HKEY to_hkey(v8::Local<v8::Value> value) {
-    if (value->IsExternal()) {
-        return static_cast<HKEY>(value.As<v8::External>()->Value());
-    }
-    return reinterpret_cast<HKEY>((size_t) value->Uint32Value());
+#define wstr(str) reinterpret_cast<LPCWSTR>(str.Utf16Value().c_str())
+
+#define NAPI_TRUE Napi::Boolean::New(env, true)
+#define NAPI_FALSE Napi::Boolean::New(env, false)
+
+HKEY to_hkey(Napi::Value value)
+{
+	if (value.IsExternal())
+	{
+		return static_cast<HKEY>(value.As<Napi::External<void>>().Data());
+	}
+
+	return reinterpret_cast<HKEY>((size_t)value.As<Napi::Number>().Uint32Value());
 }
 
-struct string_value : v8::String::Value {
-    explicit string_value(v8::Local<v8::Value> value)
-#if NODE_MODULE_VERSION >= NODE_8_0_NODE_MODULE_VERSION
-        : v8::String::Value(v8::Isolate::GetCurrent(), value) {}
-#else
-        : v8::String::Value(value) {}
-#endif
+void throw_win32(const Napi::Env &env, DWORD status, const char *syscall)
+{
+	Napi::Error error;
 
-    LPWSTR operator*() { return reinterpret_cast<LPWSTR>(this->v8::String::Value::operator *()); }
-};
+	char *errmsg = nullptr;
+	FormatMessage(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		FORMAT_MESSAGE_FROM_SYSTEM |
+		FORMAT_MESSAGE_IGNORE_INSERTS,
+		nullptr,
+		status,
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		(LPTSTR)&errmsg, 0, nullptr);
 
-void throw_win32(DWORD status, const char* syscall) {
-    Nan::ThrowError(node::WinapiErrnoException(v8::Isolate::GetCurrent(), status, syscall));
+	if (errmsg)
+	{
+		// Remove trailing newlines
+		for (int i = strlen(errmsg) - 1; 
+			i >= 0 && (errmsg[i] == '\n' || errmsg[i] == '\r'); 
+			i--)
+		{
+			errmsg[i] = '\0';
+		}
+
+		error = Napi::Error::New(env, errmsg);
+		::LocalFree(errmsg);
+	}
+	else
+	{
+		error = Napi::Error::New(env, "Unknown Error");
+	}
+
+	error.Set("errno", Napi::Number::New(env, status));
+	error.Set("syscall", syscall);
+
+	error.ThrowAsJavaScriptException();
 }
 
-NAN_METHOD(openKey) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
-    auto options = info[2]->Uint32Value();
-    auto access = info[3]->Uint32Value();
+Napi::Value openKey(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    HKEY hSubKey = 0;
-    auto status = RegOpenKeyExW(
-        hkey,
-        *subKey,
-        options,
-        access,
-        &hSubKey);
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
+	auto options = info[2].As<Napi::Number>().Uint32Value();
+	auto access = info[3].As<Napi::Number>().Uint32Value();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().SetNull();
-    }
+	HKEY hSubKey = 0;
+	auto status = RegOpenKeyExW(
+		hkey,
+		wstr(subKey),
+		options,
+		access,
+		&hSubKey);
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegOpenKeyExW");
-    }
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return info.Env().Null();
+	}
 
-    info.GetReturnValue().Set(Nan::New<v8::External>(hSubKey));
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegOpenKeyExW");
+		return env.Undefined();
+	}
+
+	return Napi::External<void>::New(env, hSubKey);
 }
 
-NAN_METHOD(createKey) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
-    auto options = info[2]->Uint32Value();
-    auto access = info[3]->Uint32Value();
+Napi::Value createKey(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    HKEY hSubKey = 0;
-    auto status = RegCreateKeyExW(
-        hkey,
-        *subKey,
-        0, // reserved,
-        NULL,
-        options,
-        access,
-        NULL, // security attributes
-        &hSubKey,
-        NULL); // disposition (created / existing)
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
+	auto options = info[2].As<Napi::Number>().Uint32Value();
+	auto access = info[3].As<Napi::Number>().Uint32Value();
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegCreateKeyExW");
-    }
+	HKEY hSubKey = 0;
+	auto status = RegCreateKeyExW(
+		hkey,
+		wstr(subKey),
+		0, // reserved,
+		NULL,
+		options,
+		access,
+		NULL, // security attributes
+		&hSubKey,
+		NULL); // disposition (created / existing)
 
-    info.GetReturnValue().Set(Nan::New<v8::External>(hSubKey));
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegCreateKeyExW");
+		return env.Undefined();
+	}
+
+	return Napi::External<void>::New(env, hSubKey);
 }
 
-NAN_METHOD(openCurrentUser) {
-    auto access = info[1]->Uint32Value();
+Napi::Value openCurrentUser(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    HKEY hkey = NULL;
-    auto status = RegOpenCurrentUser(access, &hkey);
+	auto access = info[1].As<Napi::Number>().Uint32Value();
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegOpenCurrentUser");
-    }
+	HKEY hkey = NULL;
+	auto status = RegOpenCurrentUser(access, &hkey);
 
-    info.GetReturnValue().Set(Nan::New<v8::External>(hkey));
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegOpenCurrentUser");
+		return env.Undefined();
+	}
+
+	return Napi::External<void>::New(env, hkey);
 }
 
-NAN_METHOD(loadAppKey) {
-    string_value file(info[0]);
-    auto access = info[1]->Uint32Value();
+Napi::Value loadAppKey(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    HKEY hkey = NULL;
-    auto status = RegLoadAppKeyW(
-        *file,
-        &hkey,
-        access,
-        0,
-        0);
+	auto file = info[0].ToString();
+	auto access = info[1].As<Napi::Number>().Uint32Value();
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegLoadAppKeyW");
-    }
+	HKEY hkey = NULL;
+	auto status = RegLoadAppKeyW(
+		wstr(file),
+		&hkey,
+		access,
+		0,
+		0);
 
-    info.GetReturnValue().Set(Nan::New<v8::External>(hkey));
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegLoadAppKeyW");
+		return env.Undefined();
+	}
+
+	return Napi::External<void>::New(env, hkey);
 }
 
-NAN_METHOD(enumKeyNames) {
-    auto hkey = to_hkey(info[0]);
+Napi::Value enumKeyNames(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    // Get max key length (in WCHARs, not including \0)
-    DWORD max_length = 0;
-    auto status = RegQueryInfoKeyW(
-        hkey,
-        NULL, // class
-        NULL, // class length
-        NULL, // reserved
-        NULL, // key count (using enum status instead)
-        &max_length,
-        NULL, // max class length
-        NULL, // values count
-        NULL, // max value name length
-        NULL, // max value length
-        NULL, // security descriptor size
-        NULL); // last write time
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegQueryInfoKeyW");
-    }
+	auto hkey = to_hkey(info[0]);
 
-    std::vector<uint16_t> data(max_length + 1);
+	// Get max key length (in WCHARs, not including \0)
+	DWORD max_length = 0;
+	auto status = RegQueryInfoKeyW(
+		hkey,
+		NULL, // class
+		NULL, // class length
+		NULL, // reserved
+		NULL, // key count (using enum status instead)
+		&max_length,
+		NULL, // max class length
+		NULL, // values count
+		NULL, // max value name length
+		NULL, // max value length
+		NULL, // security descriptor size
+		NULL); // last write time
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegQueryInfoKeyW");
+		return env.Undefined();
+	}
 
-    auto result = Nan::New<v8::Array>();
+	std::vector<uint16_t> data(max_length + 1);
 
-    for (uint32_t index = 0; ; index++) {
-        DWORD length = data.size();
-        status = RegEnumKeyExW(
-            hkey,
-            index,
-            (LPWSTR) data.data(),
-            &length,
-            NULL,
-            NULL, // class
-            NULL, // class length
-            NULL); // last write time
-        if (status == ERROR_NO_MORE_ITEMS) {
-            break;
-        }
-        if (status != ERROR_SUCCESS) {
-            return throw_win32(status, "RegEnumKeyExW");
-        }
+	auto result = Napi::Array::New(env);
 
-        auto item = Nan::New(data.data(), length).ToLocalChecked();
-        Nan::Set(result, index, item.As<v8::Object>());
-    }
+	for (uint32_t index = 0; ; index++)
+	{
+		DWORD length = data.size();
+		status = RegEnumKeyExW(
+			hkey,
+			index,
+			(LPWSTR)data.data(),
+			&length,
+			NULL,
+			NULL, // class
+			NULL, // class length
+			NULL); // last write time
 
-    info.GetReturnValue().Set(result);
+		if (status == ERROR_NO_MORE_ITEMS)
+		{
+			break;
+		}
+
+		if (status != ERROR_SUCCESS)
+		{
+			throw_win32(env, status, "RegEnumKeyExW");
+			return env.Undefined();
+		}
+
+		auto item = Napi::Uint16Array::New(env, length);
+		for (DWORD i = 0; i < length; i++)
+			item.Set(i, data[i]);
+
+		result.Set(index, item);
+	}
+
+	return result;
 }
 
-NAN_METHOD(enumValueNames) {
-    auto hkey = to_hkey(info[0]);
+Napi::Value enumValueNames(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    // Get max value name length (in WCHARs, not including \0)
-    DWORD max_name_length = 0;
-    auto status = RegQueryInfoKeyW(
-        hkey,
-        NULL, // class
-        NULL, // class length
-        NULL, // reserved
-        NULL, // key count (using enum status instead)
-        NULL, // max key length
-        NULL, // max class length
-        NULL, // values count
-        &max_name_length, // max value name length
-        NULL, // max value length
-        NULL, // security descriptor size
-        NULL); // last write time
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegQueryInfoKeyW");
-    }
+	auto hkey = to_hkey(info[0]);
 
-    std::vector<uint16_t> name_data(max_name_length + 1);
+	// Get max value name length (in WCHARs, not including \0)
+	DWORD max_name_length = 0;
+	auto status = RegQueryInfoKeyW(
+		hkey,
+		NULL, // class
+		NULL, // class length
+		NULL, // reserved
+		NULL, // key count (using enum status instead)
+		NULL, // max key length
+		NULL, // max class length
+		NULL, // values count
+		&max_name_length, // max value name length
+		NULL, // max value length
+		NULL, // security descriptor size
+		NULL); // last write time
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegQueryInfoKeyW");
+		return env.Undefined();
+	}
 
-    auto result = Nan::New<v8::Array>();
+	std::vector<uint16_t> name_data(max_name_length + 1);
 
-    for (uint32_t index = 0; ; index++) {
-        DWORD name_length = name_data.size();
-        status = RegEnumValueW(
-            hkey,
-            index,
-            (LPWSTR) name_data.data(),
-            &name_length,
-            NULL, // reserved
-            NULL, // type
-            NULL, // data
-            NULL); // data size
-        if (status == ERROR_NO_MORE_ITEMS) {
-            break;
-        }
-        if (status != ERROR_SUCCESS) {
-            return throw_win32(status, "RegEnumValueW");
-        }
+	auto result = Napi::Array::New(env);
 
-        auto item = Nan::New(name_data.data(), name_length).ToLocalChecked();
-        Nan::Set(result, index, item.As<v8::Object>());
-    }
+	for (uint32_t index = 0; ; index++)
+	{
+		DWORD name_length = name_data.size();
+		status = RegEnumValueW(
+			hkey,
+			index,
+			(LPWSTR)name_data.data(),
+			&name_length,
+			NULL, // reserved
+			NULL, // type
+			NULL, // data
+			NULL); // data size
+		if (status == ERROR_NO_MORE_ITEMS)
+		{
+			break;
+		}
+		if (status != ERROR_SUCCESS)
+		{
+			throw_win32(env, status, "RegEnumValueW");
+			return env.Undefined();
+		}
 
-    info.GetReturnValue().Set(result);
+		auto item = Napi::Uint16Array::New(env, name_length);
+		for (DWORD i = 0; i < name_length; i++)
+			item.Set(i, name_data[i]);
+
+		result.Set(index, item);
+	}
+
+	return result;
 }
 
-NAN_METHOD(queryValue) {
-    auto hkey = to_hkey(info[0]);
-    string_value valueName(info[1]);
-    DWORD type = 0;
-    DWORD size = 0;
-    // Query size, type
-    auto status = RegQueryValueExW(hkey, *valueName, NULL, &type, NULL, &size);
+Napi::Value queryValue(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().SetNull();
-    }
+	auto hkey = to_hkey(info[0]);
+	auto valueName = info[1].ToString();
+	DWORD type = 0;
+	DWORD size = 0;
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegQueryValueExW");
-    }
+	// Query size, type
+	auto status = RegQueryValueExW(hkey, wstr(valueName), NULL, &type, NULL, &size);
 
-    auto data = Nan::NewBuffer(size).ToLocalChecked();
-    status = RegQueryValueExW(
-        hkey,
-        *valueName,
-        NULL,
-        NULL,
-        (LPBYTE) node::Buffer::Data(data),
-        &size);
-    Nan::Set(
-        data.As<v8::Object>(),
-        Nan::New("type").ToLocalChecked().As<v8::Value>(),
-        Nan::New((uint32_t) type));
-    info.GetReturnValue().Set(data);
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return info.Env().Null();
+	}
+
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegQueryValueExW");
+		return env.Undefined();
+	}
+
+	auto data = Napi::Buffer<char>::New(env, size);
+	status = RegQueryValueExW(
+		hkey,
+		wstr(valueName),
+		NULL,
+		NULL,
+		(LPBYTE)data.As<Napi::Buffer<char>>().Data(),
+		&size);
+
+	data.Set("type", Napi::Number::New(env, (uint32_t)type));
+
+	return data;
 }
 
-NAN_METHOD(getValue) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
-    string_value valueName(info[2]);
-    auto flags = info[3]->Uint32Value();
-    DWORD type = 0;
-    DWORD size = 0;
-    // Query size, type
-    auto status = RegGetValueW(
-        hkey,
-        *subKey,
-        *valueName,
-        flags,
-        &type,
-        NULL,
-        &size);
+Napi::Value getValue(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().SetNull();
-    }
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
+	auto valueName = info[2].ToString();
+	auto flags = info[3].As<Napi::Number>().Uint32Value();
+	DWORD type = 0;
+	DWORD size = 0;
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegGetValueW");
-    }
+	// Query size, type
+	auto status = RegGetValueW(
+		hkey,
+		wstr(subKey),
+		wstr(valueName),
+		flags,
+		&type,
+		NULL,
+		&size);
 
-    auto data = Nan::NewBuffer(size).ToLocalChecked();
-    status = RegGetValueW(
-        hkey,
-        *subKey,
-        *valueName,
-        flags,
-        NULL,
-        node::Buffer::Data(data),
-        &size);
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return info.Env().Null();
+	}
 
-    // Initial RegGetValueW() will pessimistically guess it needs to
-    // add an extra \0 to the value for REG_SZ etc. for the initial call.
-    // When this isn't needed, slice the extra bytes off:
-    if (size < node::Buffer::Length(data)) {
-        v8::Local<v8::Value> args[] = {
-            Nan::New(0),
-            Nan::New((uint32_t) size),
-        };
-        data = Nan::To<v8::Object>(Nan::Call("slice", data, 2, args).ToLocalChecked()).ToLocalChecked();
-    }
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegGetValueW");
+		return env.Undefined();
+	}
 
-    Nan::Set(
-        data.As<v8::Object>(),
-        Nan::New("type").ToLocalChecked().As<v8::Value>(),
-        Nan::New((uint32_t) type));
+	auto data = Napi::Buffer<char>::New(env, size);
+	status = RegGetValueW(
+		hkey,
+		wstr(subKey),
+		wstr(valueName),
+		flags,
+		NULL,
+		data.As<Napi::Buffer<char>>().Data(),
+		&size);
 
-    info.GetReturnValue().Set(data);
+	// Initial RegGetValueW() will pessimistically guess it needs to
+	// add an extra \0 to the value for REG_SZ etc. for the initial call.
+	// When this isn't needed, slice the extra bytes off:
+	if (size < data.Length())
+	{
+		data = data.Get("slice").As<Napi::Function>().Call(
+			data,
+			{
+				Napi::Number::New(env, 0),
+				Napi::Number::New(env, (uint32_t)size),
+			}
+		).As<Napi::Buffer<char>>();
+	}
+
+	data.Set("type", Napi::Number::New(env, (uint32_t)type));
+
+	return data;
 }
 
-NAN_METHOD(setValue) {
-    auto hkey = to_hkey(info[0]);
-    string_value valueName(info[1]);
-    auto valueType = info[2]->Uint32Value();
-    auto data = info[3];
+Napi::Value setValue(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    auto status = RegSetValueExW(
-        hkey,
-        *valueName,
-        NULL,
-        valueType,
-        (const BYTE*) node::Buffer::Data(data),
-        node::Buffer::Length(data));
+	auto hkey = to_hkey(info[0]);
+	auto valueName = info[1].ToString();
+	auto valueType = info[2].As<Napi::Number>().Uint32Value();
+	auto data = info[3];
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegSetValueExW");
-    }
+	auto status = RegSetValueExW(
+		hkey,
+		wstr(valueName),
+		NULL,
+		valueType,
+		(const BYTE*)data.As<Napi::Buffer<char>>().Data(),
+		data.As<Napi::Buffer<char>>().Length());
+
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegSetValueExW");
+	}
+
+	return env.Undefined();
 }
 
-NAN_METHOD(deleteTree) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
+Napi::Value deleteTree(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    auto status = RegDeleteTreeW(hkey, *subKey);
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().Set(false);
-    }
+	auto status = RegDeleteTreeW(hkey, wstr(subKey));
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegDeleteTreeW");
-    }
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return NAPI_FALSE;
+	}
 
-    info.GetReturnValue().Set(true);
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegDeleteTreeW");
+		return env.Undefined();
+	}
+
+	return NAPI_TRUE;
 }
 
-NAN_METHOD(deleteKey) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
+Napi::Value deleteKey(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    auto status = RegDeleteKeyW(hkey, *subKey);
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().Set(false);
-    }
+	auto status = RegDeleteKeyW(hkey, wstr(subKey));
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegDeleteKeyW");
-    }
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return NAPI_FALSE;
+	}
 
-    info.GetReturnValue().Set(true);
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegDeleteKeyW");
+		return env.Undefined();
+	}
+
+	return NAPI_TRUE;
 }
 
-NAN_METHOD(deleteKeyValue) {
-    auto hkey = to_hkey(info[0]);
-    string_value subKey(info[1]);
-    string_value valueName(info[2]);
+Napi::Value deleteKeyValue(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    auto status = RegDeleteKeyValueW(hkey, *subKey, *valueName);
+	auto hkey = to_hkey(info[0]);
+	auto subKey = info[1].ToString();
+	auto valueName = info[2].ToString();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().Set(false);
-    }
+	auto status = RegDeleteKeyValueW(hkey, wstr(subKey), wstr(valueName));
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegDeleteKeyValueW");
-    }
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return NAPI_FALSE;
+	}
 
-    info.GetReturnValue().Set(true);
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegDeleteKeyValueW");
+		return env.Undefined();
+	}
+
+	return NAPI_TRUE;
 }
 
-NAN_METHOD(deleteValue) {
-    auto hkey = to_hkey(info[0]);
-    string_value valueName(info[1]);
+Napi::Value deleteValue(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    auto status = RegDeleteValueW(hkey, *valueName);
+	auto hkey = to_hkey(info[0]);
+	auto valueName = info[1].ToString();
 
-    if (status == ERROR_FILE_NOT_FOUND) {
-        return info.GetReturnValue().Set(false);
-    }
+	auto status = RegDeleteValueW(hkey, wstr(valueName));
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegDeleteValueW");
-    }
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		return NAPI_FALSE;
+	}
 
-    info.GetReturnValue().Set(true);
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegDeleteValueW");
+		return env.Undefined();
+	}
+
+	return NAPI_TRUE;
 }
 
-NAN_METHOD(closeKey) {
-    auto hkey = to_hkey(info[0]);
-    auto status = RegCloseKey(hkey);
+Napi::Value closeKey(const Napi::CallbackInfo &info)
+{
+	auto const &env = info.Env();
 
-    if (status != ERROR_SUCCESS) {
-        return throw_win32(status, "RegCloseKeyW");
-    }
+	auto hkey = to_hkey(info[0]);
+	auto status = RegCloseKey(hkey);
+
+	if (status != ERROR_SUCCESS)
+	{
+		throw_win32(env, status, "RegCloseKeyW");
+		return env.Undefined();
+	}
+
+	return env.Undefined();
 }
 
-NAN_MODULE_INIT(Init) {
-    NAN_EXPORT(target, openKey);
-    NAN_EXPORT(target, createKey);
-    NAN_EXPORT(target, openCurrentUser);
-    NAN_EXPORT(target, loadAppKey);
-    NAN_EXPORT(target, enumKeyNames);
-    NAN_EXPORT(target, enumValueNames);
-    NAN_EXPORT(target, queryValue);
-    NAN_EXPORT(target, getValue);
-    NAN_EXPORT(target, setValue);
-    NAN_EXPORT(target, deleteTree);
-    NAN_EXPORT(target, deleteKey);
-    NAN_EXPORT(target, deleteKeyValue);
-    NAN_EXPORT(target, deleteValue);
-    NAN_EXPORT(target, closeKey);
+#define NAPI_EXPORT(target, function) target[#function] = Napi::Function::New(env, function, #function);
+
+Napi::Object Init(Napi::Env env, Napi::Object exports)
+{
+	Napi::HandleScope scope(env);
+
+	NAPI_EXPORT(exports, openKey);
+	NAPI_EXPORT(exports, createKey);
+	NAPI_EXPORT(exports, openCurrentUser);
+	NAPI_EXPORT(exports, loadAppKey);
+	NAPI_EXPORT(exports, enumKeyNames);
+	NAPI_EXPORT(exports, enumValueNames);
+	NAPI_EXPORT(exports, queryValue);
+	NAPI_EXPORT(exports, getValue);
+	NAPI_EXPORT(exports, setValue);
+	NAPI_EXPORT(exports, deleteTree);
+	NAPI_EXPORT(exports, deleteKey);
+	NAPI_EXPORT(exports, deleteKeyValue);
+	NAPI_EXPORT(exports, deleteValue);
+	NAPI_EXPORT(exports, closeKey);
+
+	return exports;
 }
 
-NODE_MODULE(fastreg, Init);
+NODE_API_MODULE(fastreg, Init);

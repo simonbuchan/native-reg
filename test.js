@@ -23,10 +23,22 @@ const hkcuNoSuchKey = reg.openKey(reg.HKLM, 'NoSuchKey', reg.Access.ALL_ACCESS);
 assert.strictEqual(hkcuNoSuchKey, null);
 reg.closeKey(hkcuNoSuchKey);
 
-console.log('HKCU keys: %O', reg.enumKeyNames(reg.HKCU));
-console.log('HKCU values: %O', reg.enumValueNames(reg.HKCU));
-console.log('HKCU\\Environment keys: %O', reg.enumKeyNames(userEnvKey));
-console.log('HKCU\\Environment values: %O', reg.enumValueNames(userEnvKey));
+const hkcuKeyNames = reg.enumKeyNames(reg.HKCU);
+const hkcuValueNames = reg.enumValueNames(reg.HKCU);
+const envKeyNames = reg.enumKeyNames(userEnvKey);
+const envValueNames = reg.enumValueNames(userEnvKey);
+
+console.log('HKCU keys: %O', hkcuKeyNames);
+console.log('HKCU values: %O', hkcuValueNames);
+console.log('HKCU\\Environment keys: %O', envKeyNames);
+console.log('HKCU\\Environment values: %O', envValueNames);
+
+for (const nameList of [hkcuKeyNames, hkcuValueNames, envKeyNames, envValueNames]) {
+  assert(Array.isArray(nameList));
+  for (const name of nameList) {
+    assert(typeof name === 'string');
+  }
+}
 
 const envTempQueryValueRaw = reg.queryValueRaw(userEnvKey, 'TEMP');
 assert.strictEqual(envTempQueryValueRaw.type, reg.ValueType.EXPAND_SZ);
@@ -53,8 +65,8 @@ assert.strictEqual(envNoSuchQueryValue, null);
 const envNoSuchGetValueRaw = reg.getValueRaw(reg.HKCU, 'Environment', 'NO_SUCH_VALUE');
 assert.strictEqual(envNoSuchGetValueRaw, null);
 
-const envNoSuchGetValue= reg.getValue(reg.HKCU, 'Environment', 'NO_SUCH_VALUE');
-assert.strictEqual(envNoSuchGetValueRaw, null);
+const envNoSuchGetValue = reg.getValue(reg.HKCU, 'Environment', 'NO_SUCH_VALUE');
+assert.strictEqual(envNoSuchGetValue, null);
 
 reg.closeKey(userEnvKey);
 

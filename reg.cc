@@ -4,544 +4,499 @@
 #include <windows.h>
 #include <vector>
 
-#define wstr(str) reinterpret_cast<LPCWSTR>(str.Utf16Value().c_str())
+#ifndef NAPI_CPP_EXCEPTIONS
+#error NAPI_CPP_EXCEPTIONS is required for this code.
+#endif
 
-#define NAPI_TRUE Napi::Boolean::New(env, true)
-#define NAPI_FALSE Napi::Boolean::New(env, false)
+using namespace Napi;
 
-HKEY to_hkey(Napi::Value value)
-{
-	if (value.IsExternal())
-	{
-		return static_cast<HKEY>(value.As<Napi::External<void>>().Data());
-	}
+std::wstring to_wstring(Value value) {
+    size_t length;
+    napi_status status = napi_get_value_string_utf16(value.Env(), value, nullptr, 0, &length);
+    NAPI_THROW_IF_FAILED_VOID(value.Env(), status);
 
-	return reinterpret_cast<HKEY>((size_t)value.As<Napi::Number>().Uint32Value());
+    std::wstring result;
+    result.reserve(length + 1);
+    result.resize(length);
+    status = napi_get_value_string_utf16(
+        value.Env(),
+        value,
+        reinterpret_cast<char16_t*>(&result[0]),
+        result.capacity(),
+        nullptr);
+    NAPI_THROW_IF_FAILED_VOID(value.Env(), status);
+    return result;
 }
 
-void throw_win32(const Napi::Env &env, DWORD status, const char *syscall)
-{
-	Napi::Error error;
-
-	char *errmsg = nullptr;
-	FormatMessage(
-		FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		FORMAT_MESSAGE_FROM_SYSTEM |
-		FORMAT_MESSAGE_IGNORE_INSERTS,
-		nullptr,
-		status,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPTSTR)&errmsg, 0, nullptr);
-
-	if (errmsg)
-	{
-		// Remove trailing newlines
-		for (int i = strlen(errmsg) - 1; 
-			i >= 0 && (errmsg[i] == '\n' || errmsg[i] == '\r'); 
-			i--)
-		{
-			errmsg[i] = '\0';
-		}
-
-		error = Napi::Error::New(env, errmsg);
-		::LocalFree(errmsg);
-	}
-	else
-	{
-		error = Napi::Error::New(env, "Unknown Error");
-	}
-
-	error.Set("errno", Napi::Number::New(env, status));
-	error.Set("syscall", syscall);
-
-	error.ThrowAsJavaScriptException();
+HKEY to_hkey(Value value) {
+    if (value.IsExternal()) {
+        return static_cast<HKEY>(value.As<External<void>>().Data());
+    }
+    return reinterpret_cast<HKEY>((size_t) value.As<Number>().Uint32Value());
 }
 
-Napi::Value openKey(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Error win32_error(Env env, DWORD code, const char* syscall) {
+    Value message_value;
 
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
-	auto options = info[2].As<Napi::Number>().Uint32Value();
-	auto access = info[3].As<Napi::Number>().Uint32Value();
+    char16_t* format_message = nullptr;
+    ::FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        code,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPWSTR>(&format_message), // due to FORMAT_MESSAGE_ALLOCATE_BUFFER flag
+        0,
+        nullptr);
+    if (format_message) {
+        auto message = std::u16string{ format_message };
+        ::LocalFree(format_message);
 
-	HKEY hSubKey = 0;
-	auto status = RegOpenKeyExW(
-		hkey,
-		wstr(subKey),
-		options,
-		access,
-		&hSubKey);
+        // Remove trailing newlines
+        message.erase(message.find_last_not_of(u"\r\n"));
+        message_value = String::New(env, message);
+    } else {
+        message_value = String::New(env, u"Unknown Error");
+    }
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return info.Env().Null();
-	}
+    // node-addon-api Error::New() doesn't take Napi::Value or utf-16 messages.
+    napi_value raw_error;
+    auto status = napi_create_error(env, String::New(env, u"Win32Error"), message_value, &raw_error);
+    NAPI_THROW_IF_FAILED_VOID(env, status);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegOpenKeyExW");
-		return env.Undefined();
-	}
-
-	return Napi::External<void>::New(env, hSubKey);
+    auto error = Error(env, raw_error);
+    error.Set("errno", Number::New(env, code));
+    error.Set("syscall", syscall);
+    return error;
 }
 
-Napi::Value createKey(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
-
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
-	auto options = info[2].As<Napi::Number>().Uint32Value();
-	auto access = info[3].As<Napi::Number>().Uint32Value();
-
-	HKEY hSubKey = 0;
-	auto status = RegCreateKeyExW(
-		hkey,
-		wstr(subKey),
-		0, // reserved,
-		NULL,
-		options,
-		access,
-		NULL, // security attributes
-		&hSubKey,
-		NULL); // disposition (created / existing)
-
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegCreateKeyExW");
-		return env.Undefined();
-	}
-
-	return Napi::External<void>::New(env, hSubKey);
+void key_finalizer(Env env, void* hkey) {
+    RegCloseKey(reinterpret_cast<HKEY>(hkey));
 }
 
-Napi::Value openCurrentUser(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value openKey(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto access = info[1].As<Napi::Number>().Uint32Value();
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    auto options = info[2].As<Number>().Uint32Value();
+    auto access = info[3].As<Number>().Uint32Value();
 
-	HKEY hkey = NULL;
-	auto status = RegOpenCurrentUser(access, &hkey);
+    HKEY hSubKey = 0;
+    auto status = RegOpenKeyExW(
+        hkey,
+        subKey.c_str(),
+        options,
+        access,
+        &hSubKey);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegOpenCurrentUser");
-		return env.Undefined();
-	}
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return env.Null();
+    }
 
-	return Napi::External<void>::New(env, hkey);
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegOpenKeyExW");
+    }
+
+    return External<void>::New(env, hSubKey, key_finalizer);
 }
 
-Napi::Value loadAppKey(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value createKey(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto file = info[0].ToString();
-	auto access = info[1].As<Napi::Number>().Uint32Value();
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    auto options = info[2].As<Number>().Uint32Value();
+    auto access = info[3].As<Number>().Uint32Value();
 
-	HKEY hkey = NULL;
-	auto status = RegLoadAppKeyW(
-		wstr(file),
-		&hkey,
-		access,
-		0,
-		0);
+    HKEY hSubKey = 0;
+    auto status = RegCreateKeyExW(
+        hkey,
+        subKey.c_str(),
+        0, // reserved,
+        NULL,
+        options,
+        access,
+        NULL, // security attributes
+        &hSubKey,
+        NULL); // disposition (created / existing)
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegLoadAppKeyW");
-		return env.Undefined();
-	}
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegCreateKeyExW");
+    }
 
-	return Napi::External<void>::New(env, hkey);
+    return External<void>::New(env, hSubKey, key_finalizer);
 }
 
-Napi::Value enumKeyNames(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value openCurrentUser(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
+    auto access = info[1].As<Number>().Uint32Value();
 
-	// Get max key length (in WCHARs, not including \0)
-	DWORD max_length = 0;
-	auto status = RegQueryInfoKeyW(
-		hkey,
-		NULL, // class
-		NULL, // class length
-		NULL, // reserved
-		NULL, // key count (using enum status instead)
-		&max_length,
-		NULL, // max class length
-		NULL, // values count
-		NULL, // max value name length
-		NULL, // max value length
-		NULL, // security descriptor size
-		NULL); // last write time
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegQueryInfoKeyW");
-		return env.Undefined();
-	}
+    HKEY hkey = NULL;
+    auto status = RegOpenCurrentUser(access, &hkey);
 
-	std::vector<uint16_t> data(max_length + 1);
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegOpenCurrentUser");
+    }
 
-	auto result = Napi::Array::New(env);
-
-	for (uint32_t index = 0; ; index++)
-	{
-		DWORD length = data.size();
-		status = RegEnumKeyExW(
-			hkey,
-			index,
-			(LPWSTR)data.data(),
-			&length,
-			NULL,
-			NULL, // class
-			NULL, // class length
-			NULL); // last write time
-
-		if (status == ERROR_NO_MORE_ITEMS)
-		{
-			break;
-		}
-
-		if (status != ERROR_SUCCESS)
-		{
-			throw_win32(env, status, "RegEnumKeyExW");
-			return env.Undefined();
-		}
-
-		auto item = Napi::Uint16Array::New(env, length);
-		for (DWORD i = 0; i < length; i++)
-			item.Set(i, data[i]);
-
-		result.Set(index, item);
-	}
-
-	return result;
+    return External<void>::New(env, hkey, key_finalizer);
 }
 
-Napi::Value enumValueNames(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value loadAppKey(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
+    auto file = to_wstring(info[0]);
+    auto access = info[1].As<umber>().Uint32Value();
 
-	// Get max value name length (in WCHARs, not including \0)
-	DWORD max_name_length = 0;
-	auto status = RegQueryInfoKeyW(
-		hkey,
-		NULL, // class
-		NULL, // class length
-		NULL, // reserved
-		NULL, // key count (using enum status instead)
-		NULL, // max key length
-		NULL, // max class length
-		NULL, // values count
-		&max_name_length, // max value name length
-		NULL, // max value length
-		NULL, // security descriptor size
-		NULL); // last write time
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegQueryInfoKeyW");
-		return env.Undefined();
-	}
+    HKEY hkey = NULL;
+    auto status = RegLoadAppKeyW(
+        file.c_str(),
+        &hkey,
+        access,
+        0,
+        0);
 
-	std::vector<uint16_t> name_data(max_name_length + 1);
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegLoadAppKeyW");
+    }
 
-	auto result = Napi::Array::New(env);
-
-	for (uint32_t index = 0; ; index++)
-	{
-		DWORD name_length = name_data.size();
-		status = RegEnumValueW(
-			hkey,
-			index,
-			(LPWSTR)name_data.data(),
-			&name_length,
-			NULL, // reserved
-			NULL, // type
-			NULL, // data
-			NULL); // data size
-		if (status == ERROR_NO_MORE_ITEMS)
-		{
-			break;
-		}
-		if (status != ERROR_SUCCESS)
-		{
-			throw_win32(env, status, "RegEnumValueW");
-			return env.Undefined();
-		}
-
-		auto item = Napi::Uint16Array::New(env, name_length);
-		for (DWORD i = 0; i < name_length; i++)
-			item.Set(i, name_data[i]);
-
-		result.Set(index, item);
-	}
-
-	return result;
+    return External<void>::New(env, hkey, key_finalizer);
 }
 
-Napi::Value queryValue(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value enumKeyNames(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto valueName = info[1].ToString();
-	DWORD type = 0;
-	DWORD size = 0;
+    auto hkey = to_hkey(info[0]);
 
-	// Query size, type
-	auto status = RegQueryValueExW(hkey, wstr(valueName), NULL, &type, NULL, &size);
+    // Get max key length (in WCHARs, not including \0)
+    DWORD max_length = 0;
+    auto status = RegQueryInfoKeyW(
+        hkey,
+        NULL, // class
+        NULL, // class length
+        NULL, // reserved
+        NULL, // key count (using enum status instead)
+        &max_length,
+        NULL, // max class length
+        NULL, // values count
+        NULL, // max value name length
+        NULL, // max value length
+        NULL, // security descriptor size
+        NULL); // last write time
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegQueryInfoKeyW");
+    }
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return info.Env().Null();
-	}
+    std::u16string data;
+    data.reserve(max_length + 1);
+    data.resize(max_length);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegQueryValueExW");
-		return env.Undefined();
-	}
+    auto result = Array::New(env);
 
-	auto data = Napi::Buffer<char>::New(env, size);
-	status = RegQueryValueExW(
-		hkey,
-		wstr(valueName),
-		NULL,
-		NULL,
-		(LPBYTE)data.As<Napi::Buffer<char>>().Data(),
-		&size);
+    for (uint32_t index = 0; ; index++) {
+        DWORD length = data.capacity();
+        status = RegEnumKeyExW(
+            hkey,
+            index,
+            reinterpret_cast<LPWSTR>(&data[0]),
+            &length,
+            NULL,
+            NULL, // class
+            NULL, // class length
+            NULL); // last write time
 
-	data.Set("type", Napi::Number::New(env, (uint32_t)type));
+        if (status == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
 
-	return data;
+        if (status != ERROR_SUCCESS) {
+            throw win32_error(env, status, "RegEnumKeyExW");
+        }
+
+        result[index] = String::New(env, data.data(), length);
+    }
+
+    return result;
 }
 
-Napi::Value getValue(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value enumValueNames(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
-	auto valueName = info[2].ToString();
-	auto flags = info[3].As<Napi::Number>().Uint32Value();
-	DWORD type = 0;
-	DWORD size = 0;
+    auto hkey = to_hkey(info[0]);
 
-	// Query size, type
-	auto status = RegGetValueW(
-		hkey,
-		wstr(subKey),
-		wstr(valueName),
-		flags,
-		&type,
-		NULL,
-		&size);
+    // Get max value name length (in WCHARs, not including \0)
+    DWORD max_name_length = 0;
+    auto status = RegQueryInfoKeyW(
+        hkey,
+        NULL, // class
+        NULL, // class length
+        NULL, // reserved
+        NULL, // key count (using enum status instead)
+        NULL, // max key length
+        NULL, // max class length
+        NULL, // values count
+        &max_name_length, // max value name length
+        NULL, // max value length
+        NULL, // security descriptor size
+        NULL); // last write time
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegQueryInfoKeyW");
+    }
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return info.Env().Null();
-	}
+    std::u16string name_data;
+    name_data.reserve(max_name_length + 1);
+    name_data.resize(max_name_length);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegGetValueW");
-		return env.Undefined();
-	}
+    auto result = Array::New(env);
 
-	auto data = Napi::Buffer<char>::New(env, size);
-	status = RegGetValueW(
-		hkey,
-		wstr(subKey),
-		wstr(valueName),
-		flags,
-		NULL,
-		data.As<Napi::Buffer<char>>().Data(),
-		&size);
+    for (uint32_t index = 0; ; index++) {
+        DWORD name_length = name_data.capacity();
+        status = RegEnumValueW(
+            hkey,
+            index,
+            reinterpret_cast<LPWSTR>(&name_data[0]),
+            &name_length,
+            NULL, // reserved
+            NULL, // type
+            NULL, // data
+            NULL); // data size
+        if (status == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+        if (status != ERROR_SUCCESS) {
+            throw win32_error(env, status, "RegEnumValueW");
+        }
 
-	// Initial RegGetValueW() will pessimistically guess it needs to
-	// add an extra \0 to the value for REG_SZ etc. for the initial call.
-	// When this isn't needed, slice the extra bytes off:
-	if (size < data.Length())
-	{
-		data = data.Get("slice").As<Napi::Function>().Call(
-			data,
-			{
-				Napi::Number::New(env, 0),
-				Napi::Number::New(env, (uint32_t)size),
-			}
-		).As<Napi::Buffer<char>>();
-	}
+        result[index] = String::New(env, name_data.data(), name_length);
+    }
 
-	data.Set("type", Napi::Number::New(env, (uint32_t)type));
-
-	return data;
+    return result;
 }
 
-Napi::Value setValue(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value queryValue(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto valueName = info[1].ToString();
-	auto valueType = info[2].As<Napi::Number>().Uint32Value();
-	auto data = info[3];
+    auto hkey = to_hkey(info[0]);
+    auto valueName = to_wstring(info[1]);
+    DWORD type = 0;
+    DWORD size = 0;
 
-	auto status = RegSetValueExW(
-		hkey,
-		wstr(valueName),
-		NULL,
-		valueType,
-		(const BYTE*)data.As<Napi::Buffer<char>>().Data(),
-		data.As<Napi::Buffer<char>>().Length());
+    // Query size, type
+    auto status = RegQueryValueExW(hkey, valueName.c_str(), NULL, &type, NULL, &size);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegSetValueExW");
-	}
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return env.Null();
+    }
 
-	return env.Undefined();
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegQueryValueExW");
+    }
+
+    auto data = Buffer<BYTE>::New(env, size);
+    status = RegQueryValueExW(
+        hkey,
+        valueName.c_str(),
+        NULL,
+        NULL,
+        data.Data(),
+        &size);
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegQueryValueExW");
+    }
+
+    data.Set("type", Number::New(env, type));
+
+    return data;
 }
 
-Napi::Value deleteTree(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value getValue(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    auto valueName = to_wstring(info[2]);
+    auto flags = info[3].As<Number>().Uint32Value();
+    DWORD type = 0;
+    DWORD size = 0;
 
-	auto status = RegDeleteTreeW(hkey, wstr(subKey));
+    // Query size, type
+    auto status = RegGetValueW(
+        hkey,
+        subKey.c_str(),
+        valueName.c_str(),
+        flags,
+        &type,
+        NULL,
+        &size);
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return NAPI_FALSE;
-	}
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return env.Null();
+    }
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegDeleteTreeW");
-		return env.Undefined();
-	}
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegGetValueW");
+    }
 
-	return NAPI_TRUE;
+    auto data = Buffer<BYTE>::New(env, size);
+    status = RegGetValueW(
+        hkey,
+        subKey.c_str(),
+        valueName.c_str(),
+        flags,
+        NULL,
+        data.Data(),
+        &size);
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegGetValueW");
+    }
+
+    // Initial RegGetValueW() will pessimistically guess it needs to
+    // add an extra \0 to the value for REG_SZ etc. for the initial call.
+    // When this isn't needed, slice the extra bytes off:
+    if (size < data.Length()) {
+        data = Buffer<BYTE>::New(env, data.Data(), size);
+    }
+
+    data.Set("type", Number::New(env, type));
+
+    return data;
 }
 
-Napi::Value deleteKey(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+void setValue(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
+    auto hkey = to_hkey(info[0]);
+    auto valueName = to_wstring(info[1]);
+    auto valueType = info[2].As<Number>().Uint32Value();
+    auto data = info[3].As<Buffer<BYTE>>();
 
-	auto status = RegDeleteKeyW(hkey, wstr(subKey));
+    auto status = RegSetValueExW(
+        hkey,
+        valueName.c_str(),
+        NULL,
+        valueType,
+        data.Data(),
+        data.Length());
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return NAPI_FALSE;
-	}
-
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegDeleteKeyW");
-		return env.Undefined();
-	}
-
-	return NAPI_TRUE;
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegSetValueExW");
+    }
 }
 
-Napi::Value deleteKeyValue(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value deleteTree(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto subKey = info[1].ToString();
-	auto valueName = info[2].ToString();
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
 
-	auto status = RegDeleteKeyValueW(hkey, wstr(subKey), wstr(valueName));
+    auto status = RegDeleteTreeW(hkey, subKey.c_str());
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return NAPI_FALSE;
-	}
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return Boolean::New(env, false);
+    }
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegDeleteKeyValueW");
-		return env.Undefined();
-	}
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegDeleteTreeW");
+    }
 
-	return NAPI_TRUE;
+    return Boolean::New(env, true);
 }
 
-Napi::Value deleteValue(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value deleteKey(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto valueName = info[1].ToString();
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
 
-	auto status = RegDeleteValueW(hkey, wstr(valueName));
+    auto status = RegDeleteKeyW(hkey, subKey.c_str());
 
-	if (status == ERROR_FILE_NOT_FOUND)
-	{
-		return NAPI_FALSE;
-	}
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return Boolean::New(env, false);
+    }
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegDeleteValueW");
-		return env.Undefined();
-	}
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegDeleteKeyW");
+    }
 
-	return NAPI_TRUE;
+    return Boolean::New(env, true);
 }
 
-Napi::Value closeKey(const Napi::CallbackInfo &info)
-{
-	auto const &env = info.Env();
+Value deleteKeyValue(const CallbackInfo& info) {
+    auto env = info.Env();
 
-	auto hkey = to_hkey(info[0]);
-	auto status = RegCloseKey(hkey);
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    auto valueName = to_wstring(info[2]);
 
-	if (status != ERROR_SUCCESS)
-	{
-		throw_win32(env, status, "RegCloseKeyW");
-		return env.Undefined();
-	}
+    auto status = RegDeleteKeyValueW(hkey, subKey.c_str(), valueName.c_str());
 
-	return env.Undefined();
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return Boolean::New(env, false);
+    }
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegDeleteKeyValueW");
+    }
+
+    return Boolean::New(env, true);
 }
 
-#define NAPI_EXPORT(target, function) target[#function] = Napi::Function::New(env, function, #function);
+Value deleteValue(const CallbackInfo& info) {
+    auto env = info.Env();
 
-Napi::Object Init(Napi::Env env, Napi::Object exports)
-{
-	Napi::HandleScope scope(env);
+    auto hkey = to_hkey(info[0]);
+    auto valueName = to_wstring(info[1]);
 
-	NAPI_EXPORT(exports, openKey);
-	NAPI_EXPORT(exports, createKey);
-	NAPI_EXPORT(exports, openCurrentUser);
-	NAPI_EXPORT(exports, loadAppKey);
-	NAPI_EXPORT(exports, enumKeyNames);
-	NAPI_EXPORT(exports, enumValueNames);
-	NAPI_EXPORT(exports, queryValue);
-	NAPI_EXPORT(exports, getValue);
-	NAPI_EXPORT(exports, setValue);
-	NAPI_EXPORT(exports, deleteTree);
-	NAPI_EXPORT(exports, deleteKey);
-	NAPI_EXPORT(exports, deleteKeyValue);
-	NAPI_EXPORT(exports, deleteValue);
-	NAPI_EXPORT(exports, closeKey);
+    auto status = RegDeleteValueW(hkey, valueName.c_str());
 
-	return exports;
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return Boolean::New(env, false);
+    }
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegDeleteValueW");
+    }
+
+    return Boolean::New(env, true);
 }
 
-NODE_API_MODULE(fastreg, Init);
+void closeKey(const CallbackInfo& info) {
+    auto env = info.Env();
+
+    auto hkey = to_hkey(info[0]);
+    auto status = RegCloseKey(hkey);
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegCloseKeyW");
+    }
+}
+
+#define NAPI_DESCRIPTOR_FUNCTION(function) \
+    Napi::PropertyDescriptor::Function(#function, function)
+
+napi_value Init(napi_env env, napi_value exports) {
+    Object(env, exports).DefineProperties({
+        NAPI_DESCRIPTOR_FUNCTION(openKey),
+        NAPI_DESCRIPTOR_FUNCTION(createKey),
+        NAPI_DESCRIPTOR_FUNCTION(openCurrentUser),
+        NAPI_DESCRIPTOR_FUNCTION(loadAppKey),
+        NAPI_DESCRIPTOR_FUNCTION(enumKeyNames),
+        NAPI_DESCRIPTOR_FUNCTION(enumValueNames),
+        NAPI_DESCRIPTOR_FUNCTION(queryValue),
+        NAPI_DESCRIPTOR_FUNCTION(getValue),
+        NAPI_DESCRIPTOR_FUNCTION(setValue),
+        NAPI_DESCRIPTOR_FUNCTION(deleteTree),
+        NAPI_DESCRIPTOR_FUNCTION(deleteKey),
+        NAPI_DESCRIPTOR_FUNCTION(deleteKeyValue),
+        NAPI_DESCRIPTOR_FUNCTION(deleteValue),
+        NAPI_DESCRIPTOR_FUNCTION(closeKey),
+    });
+
+    return exports;
+}
+
+NAPI_MODULE(NODE_GYP_MODULE_NAME, Init);

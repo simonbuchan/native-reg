@@ -246,7 +246,7 @@ export function parseValue(value: Value | null): ParsedValue | null {
 export function parseString(value: Buffer): string {
   // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
   // Remarks: "The string may not have been stored with the proper terminating null characters"
-  if (value.length > 2 && !value[value.length - 2] && !value[value.length - 1]) {
+  if (value.length >= 2 && !value[value.length - 2] && !value[value.length - 1]) {
     value = value.slice(0, -2);
   }
   return value.toString('ucs-2');

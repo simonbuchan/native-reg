@@ -148,7 +148,7 @@ Value loadAppKey(const CallbackInfo& info) {
     auto env = info.Env();
 
     auto file = to_wstring(info[0]);
-    auto access = info[1].As<umber>().Uint32Value();
+    auto access = info[1].As<Number>().Uint32Value();
 
     HKEY hkey = NULL;
     auto status = RegLoadAppKeyW(

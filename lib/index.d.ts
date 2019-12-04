@@ -1,4 +1,3 @@
-/// <reference types="node" />
 export declare enum HKEY {
     CLASSES_ROOT = 2147483648,
     CURRENT_USER = 2147483649,

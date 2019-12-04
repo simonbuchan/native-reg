@@ -1,7 +1,7 @@
 const assert = require('assert');
 const { types } = require('util');
 
-const native = require('bindings')('reg.node');
+const native = require('node-gyp-build')(__dirname + '/..');
 
 // from winreg.h
 export enum HKEY {

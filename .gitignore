@@ -1,5 +1,9 @@
-/.vs/
+.*/
+!/.idea/
 /.idea/workspace.xml
 /build/
+/lib/
+/prebuilds/
 /node_modules/
 yarn-error.log*
+*.tgz

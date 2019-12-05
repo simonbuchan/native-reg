@@ -1,5 +1,10 @@
 const assert = require('assert');
-const { types } = require('util');
+const types = require('util').types || {
+  // approximate polyfill for Node.js < 10
+  isExternal(x: any): boolean {
+    return Object.prototype.toString.call(x) === '[object Object]';
+  }
+};
 
 const native = require('node-gyp-build')(__dirname + '/..');
 

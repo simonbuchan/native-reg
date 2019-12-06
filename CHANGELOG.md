@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [v0.3.1] - 2019-12-06
+## [v0.3.2] - 2019-12-06
 
 ### Fixed
 
 - Running on 32-bit node. Prebuilds both x86 and x64,
   don't try to fall back since it would currently fail
   (due to not depending on `node-addon-api`).
+
+## [v0.3.1] - 2019-12-06
+
+Broken
 
 ## [v0.3.0] - 2019-12-06
 

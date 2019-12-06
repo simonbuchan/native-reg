@@ -26,13 +26,14 @@
     "test.js"
   ],
   "scripts": {
-    "install": "node-gyp-build",
+    "install": "using prebuildify",
     "prepare": "npm run rebuild",
     "rebuild": "npm run clean && npm run build && npm run test",
     "clean": "rimraf build lib prebuilds",
-    "build": "npm run build:js && npm run build:bindings",
+    "build": "npm run build:js && npm run build:ia32 && npm run build:x64",
     "build:js": "tsc -p src",
-    "build:bindings": "prebuildify --napi --target node@8.12.0",
+    "build:ia32": "prebuildify --napi --target node@8.12.0 --arch ia32",
+    "build:x64": "prebuildify --napi --target node@8.12.0 --arch x64",
     "test": "node test"
   },
   "dependencies": {

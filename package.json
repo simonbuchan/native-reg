@@ -26,7 +26,7 @@
     "test.js"
   ],
   "scripts": {
-    "install": "using prebuildify",
+    "install": "echo using prebuilds",
     "prepare": "npm run rebuild",
     "rebuild": "npm run clean && npm run build && npm run test",
     "clean": "rimraf build lib prebuilds",

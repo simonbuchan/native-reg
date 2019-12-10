@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.3] - 2019-12-11
+
+Note this release has potentially breaking changes, to reduce the
+potential exposure to a nasty bug in the earlier v0.3 releases.
+
+Standard usage should not be affected.
+
+### Changed
+ 
+- The allocated key values can no longer be an `External` value
+  that can be passed to other packages, they are now instances
+  of an (internal) HKEY type that have a `native` property that
+  has the previous `External` value, or `null` after they are closed.
+- Use of closed keys will therefore no longer throw the underlying
+  windows API invalid value, but instead (for now) a standard `Error`
+  with the `message` of `"HKEY already closed"`.
+
+### Fixed
+
+- Nasty double-free with `closeKey()`. Was always possible if
+  it was used incorrectly before, but `v0.3.0` introduced
+  GC, which means it was not possible to correctly use
+  `closeKey()`. Huge thanks to [@cwalther](https://github.com/cwalther)
+  for catching and fixing this!
+
 ## [v0.3.2] - 2019-12-06
 
 ### Fixed

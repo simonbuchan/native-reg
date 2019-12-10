@@ -69,15 +69,17 @@ two way name <-> value mapping.
 
 For example: `Access.SET_VALUE` is `0x0002`, and `Access[2]` is `"SET_VALUE"`.
 
-#### `HKEY`
+#### `HKEY` enum
 
 Exports the set of predefined `HKEY`s.
 
 [`createKey`](#createkey), [`openKey`](#openkey), [`loadAppKey`](#loadappkey) and
 [`openCurrentUser`](#opencurrentuser) will return other values for `HKEY`s,
-which at the moment are V8 `External` values, which are essentially opaque native
-pointers. For these values you must call [`closeKey`](#closekey) once you are done to
-clean up.
+which at the moment are objects with a single property `native` with the native
+HKEY handle as a V8 `External` value, for use in other native packages, or `null`
+after it is closed.
+For these values you can call [`closeKey`](#closekey) once you are done to clean up
+early, but they will be closed by the garbage collector if you chose not to.
 
 ```ts
 export enum HKEY {
@@ -110,11 +112,21 @@ export const HKU = HKEY.USERS;
 Helper returns if the argument is a valid-looking `HKEY`. Most APIs will throw
 an assertion error if `hkey` that does not return true for this is used.
 
+Valid HKEY values are,
+* The values of the [`HKEY` enum](#hkey-enum)
+* Objects returned from [`createKey`](#createkey), [`openKey`](#openkey),
+  [`loadAppKey`](#loadappkey) and [`openCurrentUser`](#opencurrentuser)
+* `External` values that represent HKEYs (for example, from another node
+  addon)
+* Non-`0` 32-bit values that represent the pointer value of HKEYs
+  (for example, from another node addon) - not that this is unreliable on
+  64-bit applications, and should be avoided.
+
 ```ts
 export function isHKEY(hkey: any): boolean;
 ```
 
-#### `Access`
+#### `Access` enum
 
 Specifies access checks for opened or created keys. Not always enforced for
 opened keys:
@@ -145,7 +157,7 @@ export enum Access {
 }
 ```
 
-#### `ValueType`
+#### `ValueType` enum
 
 Types for registry values.
 

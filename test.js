@@ -10,6 +10,10 @@ assert(!reg.isHKEY('HKCU'));
 assert(!reg.isHKEY(0));
 assert(!reg.isHKEY(0.1));
 assert(!reg.isHKEY(Number.MAX_SAFE_INTEGER));
+assert(!reg.isHKEY({ native: 1 }));
+
+class HKEY {}
+assert(!reg.isHKEY(new HKEY()));
 
 assert.throws(() => {
   reg.openKey('HKCU', 'Environment', reg.Access.ALL_ACCESS);
@@ -18,6 +22,7 @@ assert.throws(() => {
 const userEnvKey = reg.openKey(reg.HKCU, 'Environment', reg.Access.ALL_ACCESS);
 console.log('HKCU\\Environment hkey = %O', userEnvKey);
 assert(reg.isHKEY(userEnvKey));
+assert(reg.isHKEY(userEnvKey.native));
 
 const hkcuNoSuchKey = reg.openKey(reg.HKLM, 'NoSuchKey', reg.Access.ALL_ACCESS);
 assert.strictEqual(hkcuNoSuchKey, null);
@@ -72,7 +77,7 @@ reg.closeKey(userEnvKey);
 
 assert.throws(() => {
   reg.queryValue(userEnvKey, 'TEMP');
-}, error => error.errno === 6 && error.syscall === 'RegQueryValueExW');
+}, error => error.message === "HKEY already closed"); // FIXME: something like instanceof reg.ClosedKeyError?
 
 const testingSubKey = 'Software\\native-reg-testing-key';
 
@@ -83,6 +88,10 @@ reg.setValueRaw(testKey, 'Testing', reg.ValueType.SZ, testValueData);
 const testQueryValueRaw = reg.queryValueRaw(testKey, 'Testing');
 assert.strictEqual(testQueryValueRaw.type, reg.ValueType.SZ);
 assert.strictEqual(testQueryValueRaw.toString('ucs-2'), testValueData.toString('ucs-2'));
+
+const testNativeQueryValueRaw = reg.queryValueRaw(testKey.native, 'Testing');
+assert.strictEqual(testNativeQueryValueRaw.type, reg.ValueType.SZ);
+assert.strictEqual(testNativeQueryValueRaw.toString('ucs-2'), testValueData.toString('ucs-2'));
 
 const testGetValueRaw = reg.getValueRaw(
   reg.HKCU,

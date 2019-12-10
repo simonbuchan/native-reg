@@ -1,4 +1,10 @@
 const assert = require('assert');
+const types = require('util').types || {
+  // approximate polyfill for Node.js < 10
+  isExternal(x: any): boolean {
+    return Object.prototype.toString.call(x) === '[object Object]';
+  }
+};
 
 const native = require('node-gyp-build')(__dirname + '/..');
 
@@ -95,7 +101,13 @@ export const HKU = HKEY.USERS;
 export type Value = Buffer & { type: ValueType };
 
 export function isHKEY(hkey: any): hkey is HKEY {
-  return Object.prototype.toString.call(hkey) === '[object HKEY]' || hkey && hkey === (hkey >>> 0); // checks value is a uint32
+  return (
+    hkey instanceof native.HKEY ||
+    typeof hkey === "number" &&
+      hkey !== 0 &&
+      hkey === (hkey >>> 0) || // checks value is a positive uint32
+    types.isExternal(hkey)
+  );
 }
 
 // Raw APIs

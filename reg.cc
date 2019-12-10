@@ -29,8 +29,15 @@ std::wstring to_wstring(Value value) {
 }
 
 HKEY to_hkey(Value value) {
-    if (value.IsExternal()) {
-        return static_cast<HKEY>(value.As<External<void>>().Data());
+    if (value.IsObject()) {
+        void* hkey;
+        napi_status status = napi_unwrap(value.Env(), value, &hkey);
+        if (status == napi_invalid_arg) {
+            // to preserve previous behavior, don't throw right here but let the caller throw a Win32Error
+            return 0;
+        }
+        NAPI_THROW_IF_FAILED_VOID(value.Env(), status);
+        return (HKEY)hkey;
     }
     return reinterpret_cast<HKEY>((size_t) value.As<Number>().Uint32Value());
 }
@@ -71,8 +78,23 @@ Error win32_error(Env env, DWORD code, const char* syscall) {
     return error;
 }
 
-void key_finalizer(Env env, void* hkey) {
-    RegCloseKey(reinterpret_cast<HKEY>(hkey));
+void hkey_finalizer(napi_env env, void* data, void* hint) {
+    RegCloseKey((HKEY)data);
+}
+
+static napi_ref hkey_constructor_ref;
+
+Value wrap_hkey(Env env, HKEY hkey) {
+    napi_value ctor;
+    napi_status status = napi_get_reference_value(env, hkey_constructor_ref, &ctor);
+    NAPI_THROW_IF_FAILED_VOID(env, status);
+    napi_value hkey_value;
+    status = napi_create_int64(env, (int64_t)hkey, &hkey_value);
+    NAPI_THROW_IF_FAILED_VOID(env, status);
+    napi_value result;
+    status = napi_new_instance(env, ctor, 1, &hkey_value, &result);
+    NAPI_THROW_IF_FAILED_VOID(env, status);
+    return Value(env, result);
 }
 
 Value openKey(const CallbackInfo& info) {
@@ -99,7 +121,7 @@ Value openKey(const CallbackInfo& info) {
         throw win32_error(env, status, "RegOpenKeyExW");
     }
 
-    return External<void>::New(env, hSubKey, key_finalizer);
+    return wrap_hkey(env, hSubKey);
 }
 
 Value createKey(const CallbackInfo& info) {
@@ -126,7 +148,7 @@ Value createKey(const CallbackInfo& info) {
         throw win32_error(env, status, "RegCreateKeyExW");
     }
 
-    return External<void>::New(env, hSubKey, key_finalizer);
+    return wrap_hkey(env, hSubKey);
 }
 
 Value openCurrentUser(const CallbackInfo& info) {
@@ -141,7 +163,7 @@ Value openCurrentUser(const CallbackInfo& info) {
         throw win32_error(env, status, "RegOpenCurrentUser");
     }
 
-    return External<void>::New(env, hkey, key_finalizer);
+    return wrap_hkey(env, hkey);
 }
 
 Value loadAppKey(const CallbackInfo& info) {
@@ -162,7 +184,7 @@ Value loadAppKey(const CallbackInfo& info) {
         throw win32_error(env, status, "RegLoadAppKeyW");
     }
 
-    return External<void>::New(env, hkey, key_finalizer);
+    return wrap_hkey(env, hkey);
 }
 
 Value enumKeyNames(const CallbackInfo& info) {
@@ -466,19 +488,57 @@ Value deleteValue(const CallbackInfo& info) {
 
 void closeKey(const CallbackInfo& info) {
     auto env = info.Env();
+    LSTATUS status = 0;
 
-    auto hkey = to_hkey(info[0]);
-    auto status = RegCloseKey(hkey);
-
+    if (info[0].IsObject()) {
+        void* hkey;
+        napi_status nstatus = napi_remove_wrap(env, info[0], &hkey);
+        NAPI_THROW_IF_FAILED_VOID(env, nstatus);
+        status = RegCloseKey((HKEY)hkey);
+    }
+    else {
+        auto hkey = to_hkey(info[0]);
+        status = RegCloseKey(hkey);
+    }
     if (status != ERROR_SUCCESS) {
         throw win32_error(env, status, "RegCloseKeyW");
     }
+}
+
+// error handling for functions not called through the C++ wrapper
+#define RAISE_IF_FAILED(env, status, message) \
+    if (status != napi_ok) { \
+        bool pending = false; \
+        napi_is_exception_pending(env, &pending); \
+        if (!pending) napi_throw_error(env, nullptr, message); \
+        return nullptr; \
+    }
+
+napi_value hkey_constructor(napi_env env, napi_callback_info info) {
+    napi_status status;
+    napi_value wrapper;
+    napi_value hkey;
+    size_t argc = 1;
+    status = napi_get_cb_info(env, info, &argc, &hkey, &wrapper, nullptr);
+    RAISE_IF_FAILED(env, status, "N-API error");
+    int64_t hkey_int64;
+    status = napi_get_value_int64(env, hkey, &hkey_int64);
+    RAISE_IF_FAILED(env, status, "number expected");
+    status = napi_wrap(env, wrapper, (void*)hkey_int64, &hkey_finalizer, nullptr, nullptr);
+    RAISE_IF_FAILED(env, status, "N-API error");
+    return wrapper;
 }
 
 #define NAPI_DESCRIPTOR_FUNCTION(function) \
     Napi::PropertyDescriptor::Function(#function, function)
 
 napi_value Init(napi_env env, napi_value exports) {
+    napi_value hkey_class;
+    napi_status status = napi_define_class(env, "HKEY", 4, &hkey_constructor, nullptr, 0, nullptr, &hkey_class);
+    RAISE_IF_FAILED(env, status, "N-API error");
+    status = napi_create_reference(env, hkey_class, 1, &hkey_constructor_ref);
+    RAISE_IF_FAILED(env, status, "N-API error");
+
     Object(env, exports).DefineProperties({
         NAPI_DESCRIPTOR_FUNCTION(openKey),
         NAPI_DESCRIPTOR_FUNCTION(createKey),

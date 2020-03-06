@@ -391,7 +391,7 @@ Value getValue(const CallbackInfo& info) {
     // add an extra \0 to the value for REG_SZ etc. for the initial call.
     // When this isn't needed, slice the extra bytes off:
     if (size < data.Length()) {
-        data = Buffer<BYTE>::New(env, data.Data(), size);
+        data = Buffer<BYTE>::Copy(env, data.Data(), size);
     }
 
     data.Set("type", Number::New(env, type));

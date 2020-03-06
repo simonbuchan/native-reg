@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.4] - 2020-03-06
+
+### Fixed
+
+- #7: Nasty crash in `getValue()` on later versions of v8 on some values.
+
 ## [v0.3.3] - 2019-12-11
 
 Note this release has potentially breaking changes, to reduce the

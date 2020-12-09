@@ -6,7 +6,7 @@ const types = require('util').types || {
   }
 };
 
-const native = require('node-gyp-build')(__dirname + '/..');
+const native = require('../build/release/reg.node');
 
 // from winreg.h
 export enum HKEY {

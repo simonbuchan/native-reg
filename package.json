@@ -20,29 +20,25 @@
   "files": [
     "lib",
     "src",
-    "prebuilds",
     "binding.gyp",
     "*.cc",
     "test.js"
   ],
   "scripts": {
-    "install": "echo using prebuilds",
+    "install": "npm run build:c",
     "prepare": "npm run rebuild",
     "rebuild": "npm run clean && npm run build && npm run test",
     "clean": "rimraf build lib prebuilds",
-    "build": "npm run build:js && npm run build:ia32 && npm run build:x64",
+    "build": "npm run build:js && npm run build:c",
     "build:js": "tsc -p src",
-    "build:ia32": "prebuildify --napi --target node@8.12.0 --arch ia32",
-    "build:x64": "prebuildify --napi --target node@8.12.0 --arch x64",
+    "build:c": "node-gyp rebuild",
     "test": "node test"
   },
   "dependencies": {
-    "node-gyp-build": "^4.2.0"
+    "node-addon-api": "^3.0.2"
   },
   "devDependencies": {
     "@types/node": "^10.11.0",
-    "node-addon-api": "^2.0.0",
-    "prebuildify": "^3.0.4",
     "rimraf": "^3.0.0",
     "typescript": "~3.7.3"
   }

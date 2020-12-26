@@ -18,7 +18,7 @@ if (isOldVersion(version)) {
     reg.deleteTree(key, 'Install');
     
     const installKey = reg.createKey(key, 'Install', reg.Access.ALL_ACCESS);
-    reg.setValue(installKey, 'Version', newVersion);
+    reg.setValueSZ(installKey, 'Version', newVersion);
     // ...
     reg.closeKey(installKey);
 }

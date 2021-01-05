@@ -411,14 +411,6 @@ Parses `SZ` and `EXPAND_SZ` (etc.) registry values.
 export function parseString(value: Buffer): string;
 ```
 
-#### `parseString`
-
-Parses `SZ` and `EXPAND_SZ` (etc.) registry values.
-
-```ts
-export function parseString(value: Buffer): string;
-```
-
 #### `parseMultiString`
 
 Parses `MULTI_SZ` registry values.

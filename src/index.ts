@@ -272,7 +272,7 @@ export function formatString(value: string): Buffer {
 }
 
 export function formatMultiString(values: string[]): Buffer {
-  return Buffer.from(values.join('\0') + '\0', 'ucs-2')
+  return Buffer.from(values.join('\0') + '\0\0', 'ucs-2')
 }
 
 export function formatDWORD(value: number): Buffer {

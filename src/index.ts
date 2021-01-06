@@ -47,6 +47,9 @@ export enum Access {
   WOW64_64KEY         = 0x0100,
   WOW64_32KEY         = 0x0200,
 
+  // Standard access rights
+  DELETE              = 0x00010000,
+
   // Generic rights.
   READ              = 0x2_0019,
   WRITE             = 0x2_0006,

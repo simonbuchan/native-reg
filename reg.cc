@@ -365,7 +365,7 @@ Value getValue(const CallbackInfo& info) {
         NULL,
         &size);
 
-    if (status == ERROR_FILE_NOT_FOUND) {
+    if (status == ERROR_FILE_NOT_FOUND || status == ERROR_UNSUPPORTED_TYPE) {
         return env.Null();
     }
 

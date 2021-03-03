@@ -6,7 +6,8 @@ const types = require('util').types || {
   }
 };
 
-const native = require('node-gyp-build')(__dirname + '/..');
+const isWindows = process.platform === "win32";
+const native = isWindows && require('node-gyp-build')(__dirname + '/..');
 
 // from winreg.h
 export enum HKEY {
@@ -121,6 +122,7 @@ export function createKey(
   access: Access,
   options: CreateKeyOptions = 0,
 ): HKEY {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   assert(typeof options === 'number');
@@ -134,6 +136,7 @@ export function openKey(
   access: Access,
   options: OpenKeyOptions = 0,
 ): HKEY | null {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   assert(typeof options === 'number');
@@ -142,27 +145,32 @@ export function openKey(
 }
 
 export function openCurrentUser(access: Access = Access.ALL_ACCESS): HKEY {
+  assert(isWindows);
   assert(typeof access === 'number');
   return native.openCurrentUser(access);
 }
 
 export function loadAppKey(file: string, access: Access): HKEY | null {
+  assert(isWindows);
   assert(typeof file === 'string');
   assert(typeof access === 'number');
   return native.loadAppKey(file, access);
 }
 
 export function enumKeyNames(hkey: HKEY): string[] {
+  assert(isWindows);
   assert(isHKEY(hkey));
   return native.enumKeyNames(hkey);
 }
 
 export function enumValueNames(hkey: HKEY): string[] {
+  assert(isWindows);
   assert(isHKEY(hkey));
   return native.enumValueNames(hkey);
 }
 
 export function queryValueRaw(hkey: HKEY, valueName: string): Value | null {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof valueName === 'string');
   return native.queryValue(hkey, valueName);
@@ -174,6 +182,7 @@ export function getValueRaw(
   valueName: string,
   flags: GetValueFlags = 0,
 ): Value | null {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   assert(typeof valueName === 'string');
@@ -190,6 +199,7 @@ export function setValueRaw(
   valueType: ValueType,
   data: Buffer,
 ): void {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof valueName === 'string');
   assert(typeof valueType === 'number');
@@ -198,12 +208,14 @@ export function setValueRaw(
 }
 
 export function deleteKey(hkey: HKEY, subKey: string): boolean {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteKey(hkey, subKey);
 }
 
 export function deleteTree(hkey: HKEY, subKey: string): boolean {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   return native.deleteTree(hkey, subKey);
@@ -214,6 +226,7 @@ export function deleteKeyValue(
   subKey: string,
   valueName: string,
 ): boolean {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof subKey === 'string');
   assert(typeof valueName === 'string');
@@ -221,12 +234,14 @@ export function deleteKeyValue(
 }
 
 export function deleteValue(hkey: HKEY, valueName: string): boolean {
+  assert(isWindows);
   assert(isHKEY(hkey));
   assert(typeof valueName === 'string');
   return native.deleteValue(hkey, valueName);
 }
 
 export function closeKey(hkey: HKEY | null | undefined): void {
+  assert(isWindows);
   if (hkey == null) return; // nicely handle uninitialized
   assert(isHKEY(hkey));
   native.closeKey(hkey);

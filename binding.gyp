@@ -1,22 +1,29 @@
 {
   "targets": [
-    {
-      "target_name": "reg",
-      "dependencies": [
-        "<!(node -p \"require('node-addon-api').gyp\")"
-      ],
-      "include_dirs": [
-        "<!@(node -p \"require('node-addon-api').include\")",
-      ],
-      "sources": [ "reg.cc" ],
-      "msvs_settings": {
-        "VCCLCompilerTool": {
-          "AdditionalOptions": [
-            "/std:c++17"
+      {
+          "target_name": "reg",
+          "dependencies": [
+              "<!(node -p \"require('node-addon-api').gyp\")"
           ],
-          "ExceptionHandling": 1
-        },
+          "include_dirs": [
+              "<!@(node -p \"require('node-addon-api').include\")",
+          ],
+          "conditions":[
+              ["OS=='win'", {
+                  "sources": ["reg.cc"],
+                  "msvs_settings": {
+                      "VCCLCompilerTool": {
+                          "AdditionalOptions": [
+                              "/std:c++17"
+                          ],
+                          "ExceptionHandling": 1
+                      },
+                  }
+              }],
+              ["OS!='win'", {
+                  "sources": ["reg_noop.cc"]
+              }]
+          ]
       }
-    }
   ]
 }

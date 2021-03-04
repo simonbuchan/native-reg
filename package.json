@@ -5,9 +5,6 @@
   "repository": "https://github.com/simonbuchan/native-reg",
   "bugs": "https://github.com/simonbuchan/native-reg/issues",
   "license": "MIT",
-  "os": [
-    "win32"
-  ],
   "keywords": [
     "windows",
     "win32",

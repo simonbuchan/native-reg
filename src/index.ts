@@ -6,7 +6,7 @@ const types = require('util').types || {
   }
 };
 
-const isWindows = process.platform === "win32";
+const isWindows = process.platform === 'win32';
 const native = isWindows && require('node-gyp-build')(__dirname + '/..');
 
 // from winreg.h
@@ -105,6 +105,7 @@ export const HKU = HKEY.USERS;
 export type Value = Buffer & { type: ValueType };
 
 export function isHKEY(hkey: any): hkey is HKEY {
+  assert(isWindows);
   return (
     hkey instanceof native.HKEY ||
     typeof hkey === "number" &&

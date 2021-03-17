@@ -1,0 +1,12 @@
+{
+  "name": "native-reg-example-electron",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "electron main.js"
+  },
+  "dependencies": {
+    "electron": "^12",
+    "native-reg": "link:../.."
+  }
+}

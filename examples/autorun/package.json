@@ -1,0 +1,12 @@
+{
+  "name": "native-reg-example-autorun",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "register": "node index.js register \"Hello from Node.js!\"",
+    "unregister": "node index.js unregister"
+  },
+  "dependencies": {
+    "native-reg": "link:../.."
+  }
+}

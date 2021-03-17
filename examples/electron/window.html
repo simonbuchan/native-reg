@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="">
+<title>native-reg test</title>
+<body>
+Window
+</body>
+<script>
+const raw = reg.getValue(reg.HKCU, 'Environment', 'TEMP', reg.GetValueFlags.NO_EXPAND);
+document.body.append("%TEMP%=", raw);
+</script>
+</html>

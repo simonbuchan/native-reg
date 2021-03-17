@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated dependencies.
 
+- Refactored tests to use mocha.
+
 ### Fixed
 
 - [#8](https://github.com/simonbuchan/native-reg/issues/8): Removes `os` dependency and makes this package

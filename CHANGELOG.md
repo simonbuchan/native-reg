@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support passing `null` for `subKey` to select current key, and `valueName` to select the default value, where the
   documented behavior of the underlying API supports it.
 
+- [#20](https://github.com/simonbuchan/native-reg/issues/20) Added `renameKey()` and `copyTree()`.
+
 ### Changed
 
 - Updated dependencies.

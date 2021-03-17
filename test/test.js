@@ -4,6 +4,10 @@ const reg = require('..');
 
 const testingSubKeyName = 'Software\\native-reg-testing-key';
 
+suiteSetup(() => {
+  reg.deleteTree(reg.HKCU, testingSubKeyName);
+});
+
 suite('predefined HKEYS', () => {
   suite('isKEY', () => {
     test('accepts valid', () => {
@@ -196,7 +200,6 @@ suite('with temporary key', () => {
       'Testing',
       reg.GetValueFlags.NO_EXPAND,
     );
-    console.log('getValueRaw(Testing): %O', testGetValueRaw.toString('ucs-2'));
     assert.equal(testGetValueRaw.type, reg.ValueType.SZ);
     assert.equal(testGetValueRaw.toString('ucs-2'), testValueData.toString('ucs-2'));
 
@@ -207,8 +210,21 @@ suite('with temporary key', () => {
       'Testing',
       reg.GetValueFlags.RT_ANY | reg.GetValueFlags.NO_EXPAND,
     );
-    console.log('getValueRaw(Testing): %O', testGetValueRaw2);
     assert.equal(testGetValueRaw2.toString(), '\x03\x02\x01\x00');
+
+    reg.createKey(testKey, 'A', reg.Access.ALL_ACCESS);
+    assert.deepEqual(reg.enumKeyNames(testKey), ['A']);
+    reg.renameKey(testKey, 'A', 'B');
+    assert.deepEqual(reg.enumKeyNames(testKey), ['B']);
+
+    const srcKey = reg.createKey(testKey, 'Src', reg.Access.ALL_ACCESS);
+    reg.createKey(srcKey, 'C', reg.Access.ALL_ACCESS);
+
+    const destKey = reg.createKey(testKey, 'Dest', reg.Access.ALL_ACCESS);
+    assert.deepEqual(reg.enumKeyNames(srcKey), ['C']);
+    reg.copyTree(testKey, 'Src', destKey);
+    assert.deepEqual(reg.enumKeyNames(srcKey), ['C']);
+    assert.deepEqual(reg.enumKeyNames(destKey), ['C']);
 
     reg.deleteValue(testKey, 'Testing');
     assert.equal(reg.queryValue(testKey, 'Testing'), null);

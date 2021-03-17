@@ -420,6 +420,38 @@ void setValue(const CallbackInfo& info) {
     }
 }
 
+void renameKey(const CallbackInfo& info) {
+    auto env = info.Env();
+
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    // only documented to accept NULL, not "" to rename hkey itself.
+    auto subKeyPtr = subKey.empty() ? NULL : subKey.c_str();
+    auto newSubKey = to_wstring(info[2]);
+
+    auto status = RegRenameKey(hkey, subKeyPtr, newSubKey.c_str());
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegRenameKey");
+    }
+}
+
+void copyTree(const CallbackInfo& info) {
+    auto env = info.Env();
+
+    auto hkeySrc = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    // only documented to accept NULL, not "" to copy hkey itself.
+    auto subKeyPtr = subKey.empty() ? NULL : subKey.c_str();
+    auto hkeyDest = to_hkey(info[2]);
+
+    auto status = RegCopyTreeW(hkeySrc, subKeyPtr, hkeyDest);
+
+    if (status != ERROR_SUCCESS) {
+        throw win32_error(env, status, "RegCopyTreeW");
+    }
+}
+
 Value deleteTree(const CallbackInfo& info) {
     auto env = info.Env();
 
@@ -581,6 +613,8 @@ napi_value Init(napi_env env, napi_value exports) {
         NAPI_DESCRIPTOR_FUNCTION(queryValue),
         NAPI_DESCRIPTOR_FUNCTION(getValue),
         NAPI_DESCRIPTOR_FUNCTION(setValue),
+        NAPI_DESCRIPTOR_FUNCTION(renameKey),
+        NAPI_DESCRIPTOR_FUNCTION(copyTree),
         NAPI_DESCRIPTOR_FUNCTION(deleteTree),
         NAPI_DESCRIPTOR_FUNCTION(deleteKey),
         NAPI_DESCRIPTOR_FUNCTION(deleteKeyValue),

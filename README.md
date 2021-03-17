@@ -327,6 +327,34 @@ export function getValueRaw(
 ): Value | null;
 ```
 
+#### `renameKey`
+
+Wraps [`RegRenameKey`](https://docs.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regrenamekey)
+
+> Changes the name of the specified registry key.
+
+```ts
+export function renameKey(
+  hkey: HKEY,
+  subKey: string | null,
+  newSubKey: string,
+): void;
+```
+
+#### `copyTree`
+
+Wraps [`RegCopyTreeW`](https://docs.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcopytreew)
+
+> Copies the specified registry key, along with its values and subkeys, to the specified destination key.
+
+```ts
+export function copyTree(
+  hkeySrc: HKEY,
+  subKey: string | null,
+  hkeyDest: HKEY,
+): void;
+```
+
 #### `deleteKey`
 
 Wraps [`RegDeleteKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regdeletekeyw)

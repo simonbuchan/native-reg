@@ -208,6 +208,22 @@ export function setValueRaw(
   native.setValue(hkey, valueName || "", valueType, data);
 }
 
+export function renameKey(hkey: HKEY, subKey: string | null, newSubKey: string): void {
+  assert(isWindows);
+  assert(isHKEY(hkey));
+  assert(typeof subKey === 'string' || subKey === null);
+  assert(typeof newSubKey === 'string');
+  return native.renameKey(hkey, subKey || "", newSubKey);
+}
+
+export function copyTree(hkeySrc: HKEY, subKey: string | null, hkeyDest: HKEY): void {
+  assert(isWindows);
+  assert(isHKEY(hkeySrc));
+  assert(typeof subKey === 'string' || subKey === null);
+  assert(isHKEY(hkeyDest));
+  return native.copyTree(hkeySrc, subKey || "", hkeyDest);
+}
+
 export function deleteKey(hkey: HKEY, subKey: string): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));

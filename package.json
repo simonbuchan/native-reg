@@ -37,7 +37,7 @@
     "node-gyp-build": "^4"
   },
   "devDependencies": {
-    "@types/node": "^10",
+    "@types/node": "^12",
     "mocha": "^8",
     "node-addon-api": "^3",
     "prebuildify": "^4",

@@ -425,8 +425,10 @@ Value deleteTree(const CallbackInfo& info) {
 
     auto hkey = to_hkey(info[0]);
     auto subKey = to_wstring(info[1]);
+    // only documented to accept NULL, not "" to delete own children.
+    auto subKeyPtr = subKey.empty() ? NULL : subKey.c_str();
 
-    auto status = RegDeleteTreeW(hkey, subKey.c_str());
+    auto status = RegDeleteTreeW(hkey, subKeyPtr);
 
     if (status == ERROR_FILE_NOT_FOUND) {
         return Boolean::New(env, false);

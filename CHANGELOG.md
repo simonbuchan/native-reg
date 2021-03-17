@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Some [examples]() showing usage.
 
+- [#14](https://github.com/simonbuchan/native-reg/issues/14) Support for QWORD parsing and formating as bigint values.
+
+- Support passing `null` for `subKey` to select current key, and `valueName` to select the default value, where the
+  documented behavior of the underlying API supports it.
+
 ### Changed
 
 - Updated dependencies.
@@ -21,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [#8](https://github.com/simonbuchan/native-reg/issues/8): Removes `os` dependency and makes this package
   assert if called on non-windows platforms. Thanks to [@aabuhijleh](https://github.com/aabuhijleh) for solution here.
+  
+- More conservative handling of trailing null bytes for `parseMultiString()` should fix (hopefully unusual) cases of
+  one or two missing trailing characters.
 
 ## [v0.3.4] - 2020-03-06
 

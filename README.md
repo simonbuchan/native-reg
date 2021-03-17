@@ -32,6 +32,9 @@ Read `index.ts` and linked Windows documentation for full details.
 
 ### Errors
 
+If not running on Windows, the module will not fail to load, but it will assert
+when any of the functions are called, in order to simplify cross-platform bundling.
+
 The API initially validates the arguments with the standard node `assert` library:
 
 ```js
@@ -243,7 +246,10 @@ Wraps [`RegLoadAppKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/wi
 You must call [`closeKey`](#closekey) on the result to clean up.
 
 ```ts
-export function loadAppKey(file: string, access: Access): HKEY;
+export function loadAppKey(
+  file: string,
+  access: Access,
+): HKEY;
 ```
 
 #### `openCurrentUser`
@@ -295,12 +301,15 @@ You may want to use [`queryValue`](#queryvalue) instead.
 Returns `null` if `valueName` does not exist under `hkey`.
 
 ```ts
-export function queryValueRaw(hkey: HKEY, valueName: string): Value | null;
+export function queryValueRaw(
+  hkey: HKEY,
+  valueName: string | null,
+): Value | null;
 ```
 
 #### `getValueRaw`
 
-Wraps [`RegGetValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-reggetvaluew)
+Wraps [`RegGetValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-reggetvaluew)
 without additional parsing.
 
 > Retrieves the type and data for the specified registry value.
@@ -312,8 +321,8 @@ Returns `null` if `subKey` or `valueName` does not exist under `hkey`.
 ```ts
 export function getValueRaw(
   hkey: HKEY,
-  subKey: string,
-  valueName: string,
+  subKey: string | null,
+  valueName: string | null,
   flags: GetValueFlags = 0,
 ): Value | null;
 ```
@@ -327,7 +336,10 @@ Wraps [`RegDeleteKeyW`](https://docs.microsoft.com/en-us/windows/desktop/api/win
 Returns true if the key existed before it was deleted.
 
 ```ts
-export function deleteKey(hkey: HKEY, subKey: string): boolean;
+export function deleteKey(
+  hkey: HKEY,
+  subKey: string,
+): boolean;
 ```
 
 #### `deleteTree`
@@ -339,7 +351,10 @@ Wraps [`RegDeleteTreeW`](https://docs.microsoft.com/en-us/windows/desktop/api/wi
 Returns true if the key existed before it was deleted.
 
 ```ts
-export function deleteTree(hkey: HKEY, subKey: string): boolean;
+export function deleteTree(
+  hkey: HKEY,
+  subKey: string | null,
+): boolean;
 ```
 
 #### `deleteKeyValue`
@@ -367,7 +382,10 @@ Wraps [`RegDeleteValueW`](https://docs.microsoft.com/en-us/windows/desktop/api/w
 Returns true if the value existed before it was deleted.
 
 ```ts
-export function deleteValue(hkey: HKEY, valueName: string): boolean;
+export function deleteValue(
+  hkey: HKEY,
+  valueName: string | null,
+): boolean;
 ```
 
 #### `closeKey`
@@ -392,14 +410,15 @@ Returns the JS-native value for common `Value` types:
 - `DWORD` / `DWORD_LITTLE_ENDIAN` -> `number`
 - `DWORD_BIG_ENDIAN` -> `number`
 - `MULTI_SZ` -> `string[]`
+- `QWORD` / `QWORD_LITTLE_ENDIAN` -> `bigint`
 
-Throws if the type is not one of the above!
+Throws an assertion error if the type is not one of the above!
 
 For convenience, passes through `null` so missing values don't have
 to be specially treated.
 
 ```ts
-export type ParsedValue = number | string | string[] | Buffer;
+export type ParsedValue = number | bigint | string | string[] | Buffer;
 export function parseValue(value: Value | null): ParsedValue | null;
 ```
 
@@ -445,10 +464,10 @@ export function formatDWORD(value: number): Buffer;
 
 #### `formatQWORD`
 
-Formats a `number` to `QWORD` format.
+Formats a `number` or `bigint` to `QWORD` format.
 
 ```ts
-export function formatQWORD(value: number): Buffer;
+export function formatQWORD(value: number | bigint): Buffer;
 ```
 
 ### Formatted value APIs
@@ -464,28 +483,28 @@ For example, `setValueSZ` is `setValueRaw(hkey, valueName, ValueType.SZ, formatS
 ```ts
 export function setValueSZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string,
 ): void;
 export function setValueEXPAND_SZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string,
 ): void;
 export function setValueMULTI_SZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string[],
 ): void;
 export function setValueDWORD(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: number,
 ): void;
 export function setValueQWORD(
   hkey: HKEY,
-  valueName: string,
-  value: number,
+  valueName: string | null,
+  value: number | bigint,
 ): void;
 ```
 
@@ -496,8 +515,8 @@ Wraps `getValueRaw` in `parseValue`.
 ```ts
 export function getValue(
   hkey: HKEY,
-  subKey: string,
-  valueName: string,
+  subKey: string | null,
+  valueName: string | null,
   flags: GetValueFlags = 0,
 ): ParsedValue | null;
 ```
@@ -507,5 +526,8 @@ export function getValue(
 Wraps `queryValueRaw` in `parseValue`.
 
 ```ts
-export function queryValue(hkey: HKEY, valueName: string): ParsedValue | null;
+export function queryValue(
+  hkey: HKEY,
+  valueName: string | null,
+): ParsedValue | null;
 ```

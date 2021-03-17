@@ -170,42 +170,42 @@ export function enumValueNames(hkey: HKEY): string[] {
   return native.enumValueNames(hkey);
 }
 
-export function queryValueRaw(hkey: HKEY, valueName: string): Value | null {
+export function queryValueRaw(hkey: HKEY, valueName: string | null): Value | null {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string');
-  return native.queryValue(hkey, valueName);
+  assert(typeof valueName === 'string' || valueName === null);
+  return native.queryValue(hkey, valueName || "");
 }
 
 export function getValueRaw(
   hkey: HKEY,
-  subKey: string,
-  valueName: string,
+  subKey: string | null,
+  valueName: string | null,
   flags: GetValueFlags = 0,
 ): Value | null {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
-  assert(typeof valueName === 'string');
+  assert(typeof subKey === 'string' || subKey === null);
+  assert(typeof valueName === 'string' || valueName === null);
   assert(typeof flags === 'number');
   if ((flags & GetValueFlags.RT_ANY) === 0) {
     flags |= GetValueFlags.RT_ANY;
   }
-  return native.getValue(hkey, subKey, valueName, flags);
+  return native.getValue(hkey, subKey || "", valueName || "", flags);
 }
 
 export function setValueRaw(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   valueType: ValueType,
   data: Buffer,
 ): void {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string');
+  assert(typeof valueName === 'string' || valueName === null);
   assert(typeof valueType === 'number');
   assert(Buffer.isBuffer(data));
-  native.setValue(hkey, valueName, valueType, data);
+  native.setValue(hkey, valueName || "", valueType, data);
 }
 
 export function deleteKey(hkey: HKEY, subKey: string): boolean {
@@ -215,11 +215,11 @@ export function deleteKey(hkey: HKEY, subKey: string): boolean {
   return native.deleteKey(hkey, subKey);
 }
 
-export function deleteTree(hkey: HKEY, subKey: string): boolean {
+export function deleteTree(hkey: HKEY, subKey: string | null): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
-  return native.deleteTree(hkey, subKey);
+  assert(typeof subKey === 'string' || subKey === null);
+  return native.deleteTree(hkey, subKey || "");
 }
 
 export function deleteKeyValue(
@@ -234,11 +234,11 @@ export function deleteKeyValue(
   return native.deleteKeyValue(hkey, subKey, valueName);
 }
 
-export function deleteValue(hkey: HKEY, valueName: string): boolean {
+export function deleteValue(hkey: HKEY, valueName: string | null): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string');
-  return native.deleteValue(hkey, valueName);
+  assert(typeof valueName === 'string' || valueName === null);
+  return native.deleteValue(hkey, valueName || "");
 }
 
 export function closeKey(hkey: HKEY | null | undefined): void {
@@ -250,7 +250,7 @@ export function closeKey(hkey: HKEY | null | undefined): void {
 
 // Format helpers
 
-export type ParsedValue = number | string | string[] | Buffer;
+export type ParsedValue = number | bigint | string | string[] | Buffer;
 
 export function parseValue(value: Value | null): ParsedValue | null {
   if (value === null) {
@@ -258,7 +258,7 @@ export function parseValue(value: Value | null): ParsedValue | null {
   }
   switch (value.type) {
     default:
-      throw new Error(`Unhandled reg value type: ${value.type}`);
+      return assert.fail(`Unhandled reg value type: ${value.type}`);
     case ValueType.SZ:
     case ValueType.EXPAND_SZ:
       return parseString(value);
@@ -270,20 +270,29 @@ export function parseValue(value: Value | null): ParsedValue | null {
       return value.readUInt32BE(0);
     case ValueType.MULTI_SZ:
       return parseMultiString(value);
+    case ValueType.QWORD_LITTLE_ENDIAN:
+      return value.readBigUInt64LE(0);
   }
 }
 
-export function parseString(value: Buffer): string {
+function trimUcs2Null(value: Buffer) {
   // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
   // Remarks: "The string may not have been stored with the proper terminating null characters"
-  if (value.length >= 2 && !value[value.length - 2] && !value[value.length - 1]) {
+  if (value.length >= 2 && value[value.length - 2] === 0 && value[value.length - 1] === 0) {
     value = value.slice(0, -2);
   }
+  return value;
+}
+
+export function parseString(value: Buffer): string {
+  value = trimUcs2Null(value);
   return value.toString('ucs-2');
 }
 
 export function parseMultiString(value: Buffer) {
-  return value.slice(0, -4).toString('ucs-2').split('\0');
+  value = trimUcs2Null(value);
+  value = trimUcs2Null(value);
+  return value.toString('ucs-2').split('\0');
 }
 
 export function formatString(value: string): Buffer {
@@ -300,10 +309,15 @@ export function formatDWORD(value: number): Buffer {
   return data;
 }
 
-export function formatQWORD(value: number): Buffer {
+export function formatQWORD(value: number | bigint): Buffer {
   const data = Buffer.alloc(8);
-  data.writeUInt32LE(value & 0xFFFFFFFF, 0);
-  data.writeUInt32LE(value >>> 32, 4);
+  if (typeof value === "bigint") {
+    data.writeBigUInt64LE(value, 0);
+  } else {
+    data.writeUInt32LE(value, 0);
+    // bit operations immediately cast to a 32-bit value
+    data.writeUInt32LE(value / 0x1_0000_0000, 4);
+  }
   return data;
 }
 
@@ -311,7 +325,7 @@ export function formatQWORD(value: number): Buffer {
 
 export function setValueSZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string,
 ): void {
   setValueRaw(hkey, valueName, ValueType.SZ, formatString(value));
@@ -319,7 +333,7 @@ export function setValueSZ(
 
 export function setValueEXPAND_SZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string,
 ): void {
   setValueRaw(hkey, valueName, ValueType.EXPAND_SZ, formatString(value));
@@ -327,7 +341,7 @@ export function setValueEXPAND_SZ(
 
 export function setValueMULTI_SZ(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: string[],
 ): void {
   setValueRaw(hkey, valueName, ValueType.MULTI_SZ, formatMultiString(value));
@@ -335,7 +349,7 @@ export function setValueMULTI_SZ(
 
 export function setValueDWORD(
   hkey: HKEY,
-  valueName: string,
+  valueName: string | null,
   value: number,
 ): void {
   setValueRaw(hkey, valueName, ValueType.DWORD, formatDWORD(value));
@@ -343,21 +357,21 @@ export function setValueDWORD(
 
 export function setValueQWORD(
   hkey: HKEY,
-  valueName: string,
-  value: number,
+  valueName: string | null,
+  value: number | bigint,
 ): void {
   setValueRaw(hkey, valueName, ValueType.QWORD, formatQWORD(value));
 }
 
 export function getValue(
   hkey: HKEY,
-  subKey: string,
-  valueName: string,
+  subKey: string | null,
+  valueName: string | null,
   flags: GetValueFlags = 0,
 ): ParsedValue | null {
   return parseValue(getValueRaw(hkey, subKey, valueName, flags));
 }
 
-export function queryValue(hkey: HKEY, valueName: string): ParsedValue | null {
+export function queryValue(hkey: HKEY, valueName: string | null): ParsedValue | null {
   return parseValue(queryValueRaw(hkey, valueName));
 }

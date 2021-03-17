@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [#8](https://github.com/simonbuchan/native-reg/issues/8): Removes `os` dependency and makes this package
+  assert if called on non-windows platforms. Thanks to [@aabuhijleh](https://github.com/aabuhijleh) for solution here.
+
 ## [v0.3.4] - 2020-03-06
 
 ### Fixed
 
-- #7: Nasty crash in `getValue()` on later versions of v8 on some values.
+- [#7](https://github.com/simonbuchan/native-reg/issues/7): Nasty crash in `getValue()` on later versions of v8 on some values.
 
 ## [v0.3.3] - 2019-12-11
 

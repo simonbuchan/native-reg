@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [#23](https://github.com/simonbuchan/native-reg/issues/23) Don't break electron-rebuild by avoiding a top-level
+  binding.gyp.
+
 ## [v0.3.5] - 2021-03-18
 
 ### Added

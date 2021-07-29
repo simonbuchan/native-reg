@@ -18,8 +18,8 @@
     "lib",
     "src",
     "test",
-    "prebuilds",
-    "binding.gyp",
+    "binding/prebuilds",
+    "binding/binding.gyp",
     "*.cc"
   ],
   "scripts": {
@@ -29,8 +29,8 @@
     "clean": "rimraf build lib prebuilds",
     "build": "yarn build:js && yarn build:ia32 && yarn build:x64",
     "build:js": "tsc -p src",
-    "build:ia32": "prebuildify --napi --target node@8.12.0 --arch ia32",
-    "build:x64": "prebuildify --napi --target node@8.12.0 --arch x64",
+    "build:ia32": "prebuildify --napi --target node@8.12.0 --cwd binding --arch ia32",
+    "build:x64": "prebuildify --napi --target node@8.12.0 --cwd binding --arch x64",
     "test": "mocha --ui tdd"
   },
   "dependencies": {

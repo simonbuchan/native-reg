@@ -1,9 +1,9 @@
 .*/
 !/.idea/
 /.idea/workspace.xml
-/build/
+/binding/build/
+/binding/prebuilds/
 /lib/
-/prebuilds/
 node_modules/
 yarn-error.log*
 *.tgz

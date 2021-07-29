@@ -7,7 +7,7 @@ const types = require('util').types || {
 };
 
 const isWindows = process.platform === 'win32';
-const native = isWindows && require('node-gyp-build')(__dirname + '/..');
+const native = isWindows && require('node-gyp-build')(__dirname + '/../binding');
 
 // from winreg.h
 export enum HKEY {

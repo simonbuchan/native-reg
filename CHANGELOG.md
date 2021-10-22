@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.0] - 2021-10-22
+
+No effective changes, bumping to v1.0.0 to reflect that the library should be considered stable at this point.
+
+### Changed
+
+- Minimum supported node version is now v12.0.0, due to updating to `node-addon-api` v4.
+
 ## [v0.3.6] - 2021-10-22
 
 ### Fixed

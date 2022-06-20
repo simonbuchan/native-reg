@@ -30,6 +30,43 @@ reg.closeKey(key);
 
 Read `index.ts` and linked Windows documentation for full details.
 
+Contents:
+- [Errors](#errors)
+- [Constants](#constants):
+  - [`HKEY` enum](#hkey-enum)
+    - [Shorthands](#shorthands)
+    - [`isHKEY`](#ishkey)
+  - [`Access` enum](#access-enum)
+  - [`ValueType` enum](#valuetype-enum)
+- [Raw APIs](#raw-apis):
+  - [`Value` type](#value-type)
+  - [`createKey`](#createkey)
+  - [`openKey`](#openkey)
+  - [`loadAppKey`](#loadappkey)
+  - [`openCurrentUser`](#opencurrentuser)
+  - [`enumKeyNames`](#enumkeynames)
+  - [`enumValueNames`](#enumvaluenames)
+  - [`queryValueRaw`](#queryvalueraw)
+  - [`getValueRaw`](#getvalueraw)
+  - [`setValueRaw`](#setvalueraw)
+  - [`renameKey`](#renamekey)
+  - [`copyTree`](#copytree)
+  - [`deleteKey`](#deletekey)
+  - [`deleteTree`](#deletetree)
+  - [`deleteKeyValue`](#deletekeyvalue)
+  - [`deleteValue`](#deletevalue)
+  - [`closeKey`](#closekey)
+- [Format Helpers](#format-helpers)
+  - [`parseValue`](#parsevalue)
+  - [`parseString`](#parsestring)
+  - [`parseMultiString`](#parsemultistring)
+  - [`formatDWORD`](#formatdword)
+  - [`formatQWORD`](#formatqword)
+- [Formatted value APIs](#formatted-value-apis)
+  - [`setValue{Type}`](#setvaluetype)
+  - [`getValue`](#getvalue)
+  - [`queryValue`](#queryvalue)
+
 ### Errors
 
 If not running on Windows, the module will not fail to load, but it will assert
@@ -74,7 +111,7 @@ For example: `Access.SET_VALUE` is `0x0002`, and `Access[2]` is `"SET_VALUE"`.
 
 #### `HKEY` enum
 
-Exports the set of predefined `HKEY`s.
+Exports the set of [predefined `HKEY`s](https://docs.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys).
 
 [`createKey`](#createkey), [`openKey`](#openkey), [`loadAppKey`](#loadappkey) and
 [`openCurrentUser`](#opencurrentuser) will return other values for `HKEY`s,
@@ -162,7 +199,7 @@ export enum Access {
 
 #### `ValueType` enum
 
-Types for registry values.
+Types for registry values. See [documentation](https://docs.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types).
 
 ```ts
 export enum ValueType  {
@@ -192,7 +229,7 @@ the allocation and general usage style.
 The exception is [`enumKeyNames`](#enumkeynames) and [`enumValueNames`](#enumvaluenames)
 which iterate to build a list and only return the names, and not other properties.
 
-#### `Value`
+#### `Value` type
 
 Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
 are simply Node `Buffer`s with an additional `type` property from `ValueType`:
@@ -216,6 +253,13 @@ export function createKey(
   access: Access,
   options: CreateKeyOptions = 0,
 ): HKEY;
+
+export enum CreateKeyOptions {
+  NON_VOLATILE = 0,
+  VOLATILE = 1,
+  CREATE_LINK = 2,
+  BACKUP_RESTORE = 4,
+}
 ```
 
 #### `openKey`
@@ -235,6 +279,10 @@ export function openKey(
   access: Access,
   options: OpenKeyOptions = 0,
 ): HKEY | null;
+
+export enum OpenKeyOptions {
+  OPEN_LINK = 8,
+}
 ```
 
 #### `loadAppKey`
@@ -325,6 +373,39 @@ export function getValueRaw(
   valueName: string | null,
   flags: GetValueFlags = 0,
 ): Value | null;
+
+export enum GetValueFlags {
+  RT_ANY = 0xffff,
+  RT_REG_NONE = 0x0001,
+  RT_REG_SZ = 0x0002,
+  RT_REG_EXPAND_SZ = 0x0004,
+  RT_REG_BINARY = 0x0008,
+  RT_REG_DWORD = 0x0010,
+  RT_REG_MULTI_SZ = 0x0020,
+  RT_REG_QWORD = 0x0040,
+  RT_DWORD = RT_REG_DWORD | RT_REG_BINARY,
+  RT_QWORD = RT_REG_QWORD | RT_REG_BINARY,
+
+  NO_EXPAND = 0x10000000,
+  // ZEROONFAILURE = 0x20000000, // doesn't make sense here
+  SUBKEY_WOW6464KEY = 0x00010000,
+  SUBKEY_WOW6432KEY = 0x00020000,
+}
+```
+
+#### `setValueRaw`
+
+Wraps [`RegSetValueExW`](https://docs.microsoft.com/en-us/windows/desktop/api/winreg/nf-winreg-regsetvalueexw)
+
+> Sets the data and type of a specified value under a registry key.
+
+```ts
+export function setValueRaw(
+  hkey: HKEY,
+  valueName: string | null,
+  valueType: ValueType,
+  data: Buffer,
+): void;
 ```
 
 #### `renameKey`
@@ -504,7 +585,8 @@ These APIs wrap the raw value APIs with the formatting helpers.
 
 #### `setValue{Type}`
 
-Sets the registry value with a matching `{Type}` and formatted value.
+A set of wrappers that sets the registry value using [`setValueRaw`](#setvalueraw)
+with the appropriate [`ValueType`](#valuetype-enum) and [format helper](#format-helpers).
 
 For example, `setValueSZ` is `setValueRaw(hkey, valueName, ValueType.SZ, formatString(value))`.
 
@@ -538,7 +620,7 @@ export function setValueQWORD(
 
 #### `getValue`
 
-Wraps `getValueRaw` in `parseValue`.
+Wraps [`getValueRaw`](#getvalueraw) in [`parseValue`](#parsevalue).
 
 ```ts
 export function getValue(
@@ -551,7 +633,7 @@ export function getValue(
 
 #### `queryValue`
 
-Wraps `queryValueRaw` in `parseValue`.
+Wraps [`queryValueRaw`](#queryvalueraw) in [`parseValue`](#parsevalue).
 
 ```ts
 export function queryValue(

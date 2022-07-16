@@ -1,7 +1,7 @@
 {
   "name": "native-reg",
   "description": "Native in-process low-level windows registry access.",
-  "version": "1.0.0",
+  "version": "1.1.0-alpha.0",
   "repository": "https://github.com/simonbuchan/native-reg",
   "bugs": "https://github.com/simonbuchan/native-reg/issues",
   "license": "MIT",
@@ -13,33 +13,32 @@
   ],
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "gypfile": false,
   "files": [
     "lib",
     "src",
     "test",
-    "binding/prebuilds",
-    "binding/binding.gyp",
+    "prebuilds",
+    "binding.gyp",
     "*.cc"
   ],
   "scripts": {
-    "install": "echo using prebuilds",
+    "install": "node-gyp-build",
     "prepack": "yarn rebuild",
     "rebuild": "yarn clean && yarn build && yarn test",
     "clean": "rimraf build lib prebuilds",
     "build": "yarn build:js && yarn build:ia32 && yarn build:x64",
     "build:js": "tsc -p src",
-    "build:ia32": "prebuildify --napi --target node@12.0.0 --cwd binding --arch ia32",
-    "build:x64": "prebuildify --napi --target node@12.0.0 --cwd binding --arch x64",
+    "build:ia32": "prebuildify --napi --target node@12.0.0 --arch ia32",
+    "build:x64": "prebuildify --napi --target node@12.0.0 --arch x64",
     "test": "mocha --ui tdd"
   },
   "dependencies": {
-    "node-gyp-build": "4"
+    "node-gyp-build": "4",
+    "node-addon-api": "4"
   },
   "devDependencies": {
     "@types/node": "12",
     "mocha": "9",
-    "node-addon-api": "4",
     "prebuildify": "4",
     "rimraf": "3",
     "typescript": "~4.4"

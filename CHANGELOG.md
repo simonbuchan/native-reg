@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Restored node-gyp-build as a fallback for prebuildify on unsupported platforms. Unfortunately this does
+  add the otherwise unnecessary `node-addon-api` dependency, about ~400kb.
+
 ## [v1.0.0] - 2021-10-22
 
 No effective changes, bumping to v1.0.0 to reflect that the library should be considered stable at this point.

@@ -1,8 +1,8 @@
 .*/
 !/.idea/
 /.idea/workspace.xml
-/binding/build/
-/binding/prebuilds/
+/build/
+/prebuilds/
 /lib/
 node_modules/
 yarn-error.log*

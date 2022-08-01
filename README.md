@@ -1,6 +1,14 @@
 # `native-reg`
 
-In process native module for Windows registry access.
+In-process native node module for Windows registry access. It includes prebuilt
+binaries for Windows for x86 64-bit and 32-bit, and also ARM 64-bit (tested against
+unofficial Node.js builds, [as it is not currently supported](https://github.com/nodejs/node/issues/25998)).
+
+There are no fallbacks for other (future?) Windows targets, though requests are
+welcome.
+
+If not running on Windows, the module will not fail to load in order to simplify
+cross-platform bundling, but it will assert if any of the functions are called.
 
 ## Example
 
@@ -28,7 +36,7 @@ reg.closeKey(key);
 
 ## API
 
-Read `index.ts` and linked Windows documentation for full details.
+Read each API's linked Windows documentation for details on functionality and usage.
 
 Contents:
 - [Errors](#errors)
@@ -68,9 +76,6 @@ Contents:
   - [`queryValue`](#queryvalue)
 
 ### Errors
-
-If not running on Windows, the module will not fail to load, but it will assert
-when any of the functions are called, in order to simplify cross-platform bundling.
 
 The API initially validates the arguments with the standard node `assert` library:
 

@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.0] - 2022-08-01
+
 ### Added
 
-- Add (experimental) ARM64 support.
+- ARM64 support.
 
 ## [v1.0.0] - 2021-10-22
 

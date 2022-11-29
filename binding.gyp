@@ -8,7 +8,14 @@
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
       ],
-      "sources": [ "reg.cc" ],
+      "conditions": [
+        [
+          "OS==\"win\"",
+          {
+            "sources": ["reg.cc"]
+          }
+        ]
+      ],
       "msvs_settings": {
         "VCCLCompilerTool": {
           "AdditionalOptions": [

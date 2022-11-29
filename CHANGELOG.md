@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.1] - 2022-11-30
+
+### Fixed
+
+- [#35](https://github.com/simonbuchan/native-reg/issues/35) which is a regression in 1.1.0 of
+  [#23](https://github.com/simonbuchan/native-reg/issues/23) fixed in 0.3.6.
+  Should only affect non-windows builds using `electron-rebuild`.
+
 ## [v1.1.0] - 2022-08-01
 
 ### Added

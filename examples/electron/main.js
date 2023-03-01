@@ -13,6 +13,7 @@ app.whenReady().then(async () => {
     const window = new BrowserWindow({
         webPreferences: {
             preload: require.resolve("./preload"),
+            nodeIntegration: true,
         },
     });
     window.webContents.openDevTools({ mode: "right" });

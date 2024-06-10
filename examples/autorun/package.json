@@ -6,6 +6,9 @@
     "register": "node index.js register \"Hello from Node.js!\"",
     "unregister": "node index.js unregister"
   },
+  "volta": {
+    "extends": "../../package.json"
+  },
   "dependencies": {
     "native-reg": "link:../.."
   }

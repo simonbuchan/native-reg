@@ -4,6 +4,8 @@
 /build/
 /prebuilds/
 /lib/
+
+dist/
 node_modules/
 yarn-error.log*
 *.tgz

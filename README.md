@@ -1,16 +1,17 @@
 # `native-reg`
 
-In-process native node module for Windows registry access. It includes prebuilt
-binaries for Windows for x86 64-bit and 32-bit, and also ARM 64-bit (tested against
-unofficial Node.js builds, [as it is not currently supported](https://github.com/nodejs/node/issues/25998)).
+Provides direct access to the Windows Registry native APIs using a node addon (native C++ code).
 
-There are no fallbacks for other (future?) Windows targets, though requests are
-welcome.
-
-If not running on Windows, the module will not fail to load in order to simplify
-cross-platform bundling, but it will assert if any of the functions are called.
+Contents:
+- [Example](#example)
+- [Comparison to other packages](#comparison-to-other-packages)
+- [API](#api)
+- [Bundling](#bundling)
+- [Development](#development)
 
 ## Example
+
+A simple installer example:
 
 ```js
 const reg = require('native-reg');
@@ -33,6 +34,48 @@ if (isOldVersion(version)) {
 
 reg.closeKey(key);
 ```
+
+## Comparison to other packages
+
+There were already several other packages that provide access to the Windows Registry:
+
+- [`winreg`](https://www.npmjs.com/package/winreg) (and it's several forks) is very lightweight,
+  as it simply calls `reg.exe` without any build or bundling dependencies, but in exchange:
+  - it exposes you to the system encoding, meaning it's more work to support Unicode,
+  - it has to handle correctly escaping the command line and parsing the output, something
+    that can commonly cause security issues,
+  - it apparently may be broken by some Group Policy settings?
+  - it is still a good and popular option if you want to avoid native code!
+- [`regedit`](https://www.npmjs.com/package/regedit) is something of a middle-ground, using the
+  Windows Script Host (`cscript.exe` in this case) to access the registry, which can avoid the
+  potential for commandline encoding issues but still requires an external process and adds the
+  scripting files (`.wsf`) themselves as something which has to be handled by your bundling setup.
+  Still a decent middle-ground option to avoid native code.
+- [`registry-js`](https://www.npmjs.com/package/registry-js) is most similar to this library,
+  using a native addon with prebuilt binaries, but it only aims to implement the most common
+  subset of behavior rather than attempting to reflect the full API: most notably as of 1.16.0
+  it does not have support for creating and deleting keys (rather than values).
+  I do have some concern about the GitHub issues, otherwise this seems like a good option to try if
+  you don't need the full API.
+- [`windows-registry`](https://www.npmjs.com/package/windows-registry) is one of the earliest
+  packages I could find. It uses the [`ffi`](https://www.npmjs.com/package/ffi) package, so it
+  still requires a build step, but is now unmaintained and - despite the name - has a strange API
+  that attempts to cover several different uses like UAC elevation, and misses basic registry APIs like
+  key and value enumeration. Probably not a good choice for new projects due to the lack of
+  maintenance if nothing else, but perhaps you might find the extra uses helpful.
+
+This package aims to improve on the existing packages by:
+- providing the entire Windows Registry API (with the notable exception of the transacted APIs)
+- implementing the API using a native addon to provide good performance and correctness.
+- directly mapping to the Windows API, providing a useful overview in this readme, and linking to
+  the official documentation for each function.
+- providing prebuilt binaries for x86, x64, and ARM64 Windows to avoid the need for a build toolchain
+  on installation
+  - As far as I know, these are the only currently supported windows architectures, so there is no
+    fallback to build from source, but feel free to request either another prebuild target or fallback
+    if you find a use I've missed.
+- If not running on Windows, the module will not fail to load in order to simplify cross-platform bundling,
+  but it will assert if any of the functions are called to avoid accidental use.
 
 ## API
 
@@ -89,11 +132,12 @@ try {
 }
 ```
 
-If the wrapped Windows API returns an error, with a couple of exceptions for
-commonly non-failure errors (e.g. key does not exist), are thrown as JS `Error`s
-with the generic error message, e.g.: `Access is denied.`, but additional
-standard `errno` and `syscall` properties, for example, a common error is trying
-to use `Access.ALL_ACCESS` on `reg.HKLM`, which you need UAC elevation for:
+Except as noted by the individual API documentation, for example "not found" errors,
+if the wrapped Windows API returns an error it is thrown as a javascript `Error`
+instance with the generic Windows-provided error message, e.g.: `Access is denied.`,
+and with additional `errno` and `syscall` properties as with Node's own errors,
+for example: a common error is trying to use `Access.ALL_ACCESS` on `reg.HKLM`, which
+you need UAC elevation for:
 
 ```js
 try {
@@ -646,3 +690,25 @@ export function queryValue(
   valueName: string | null,
 ): ParsedValue | null;
 ```
+
+## Bundling
+
+Using code with native dependencies with bundlers can be complicated. The simplest option is simply to mark this
+package as external, for example `external: ["native-reg"]` for rollup / vite.
+
+There is an example showing both this approach, and using a manual bundling plugin in the examples/rollup directory,
+which should at least get you started.
+
+## Development
+
+This package uses `prebuildify` to create native builds for `x64`, `x64`, and `ARM64` Windows. This wraps `node-gyp`
+to cross-compile the native code for each target, copying the results to the `prebuilds` directory. Because of this,
+if you are a user of this library you should not need anything installed yourself.
+
+If you want to build this library locally you will need to install the required build tools, check out [the `node-gyp`
+documentation](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows) for the official instructions.
+
+Then it should simply be `yarn build` to build the typescript and native code for each platform, and run a simple test
+to ensure the native code loads and supports basic functionality. If you are only testing changes to the TypeScript
+code you should only need to run `yarn build:ts` and `yarn build:{arch}` for your current architecture, for example
+you can avoid needing to install the ARM64 build tools.

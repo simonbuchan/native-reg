@@ -1,0 +1,25 @@
+{
+  "name": "native-reg-example-rollup",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c --environment METHOD:external",
+    "build:method:replace": "rollup -c --environment METHOD:replace",
+    "run": "node dist/index.js"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  },
+  "dependencies": {
+    "native-reg": "link:../.."
+  },
+  "devDependencies": {
+    "@gordonmleigh/rollup-plugin-sourcemaps": "^0.1.2",
+    "@rollup/plugin-commonjs": "^26.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^5.0.7",
+    "magic-string": "^0.30.10",
+    "rollup": "^4.18.0"
+  }
+}

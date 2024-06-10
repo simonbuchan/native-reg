@@ -4,6 +4,7 @@
     <content url="file://$MODULE_DIR$">
       <excludePattern pattern=".*" />
       <excludePattern pattern="build" />
+      <excludePattern pattern="dist" />
       <excludePattern pattern="lib" />
       <excludePattern pattern="prebuilds" />
     </content>

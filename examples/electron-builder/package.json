@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "electron main.js"
+    "start": "electron index.js",
+    "build": "electron-builder"
   },
   "dependencies": {
-    "electron": "^30",
     "native-reg": "link:../.."
+  },
+  "devDependencies": {
+    "electron": "30",
+    "electron-builder": "24"
   }
 }

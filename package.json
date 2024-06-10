@@ -45,7 +45,7 @@
     "mocha": "10",
     "node-addon-api": "4",
     "prebuildify": "6",
-    "rimraf": "3",
+    "rimraf": "5",
     "typescript": "~4.4"
   }
 }

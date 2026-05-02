@@ -107,6 +107,7 @@ Contents:
   - [`deleteKeyValue`](#deletekeyvalue)
   - [`deleteValue`](#deletevalue)
   - [`closeKey`](#closekey)
+  - [`watch`](#watch)
 - [Format Helpers](#format-helpers)
   - [`parseValue`](#parsevalue)
   - [`parseString`](#parsestring)
@@ -556,6 +557,28 @@ For convenience, `null` or `undefined` values are allowed and ignored.
 
 ```ts
 export function closeKey(hkey: HKEY | null | undefined): void;
+```
+
+#### `watch`
+
+Watches a given key and all of its descendants for changes.  The returned `RegistryWatcher` is an
+`EventEmitter` that emits `change` events when any data changes in the key or its children
+(unless the `watchSubtree` option is `false`).
+
+Due to the way the Windows API ([`RegNotifyChangeKeyValue`](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regnotifychangekeyvalue))
+works, we only receive a notification that *something* in the watched tree changed,
+but not what specifically; therefore the `change` event has no arguments.
+
+Note that each watcher starts up a native background thread.  The thread only wakes when changes occur
+in the watched registry path, but it necessarily consumes some RAM (roughly 64 kB each).
+Call `RegistryWatcher.close()` to stop watching the registry and release resources.
+
+```ts
+export function watch(hkey: HKEY, subKey: string, options?: WatchOptions): RegistryWatcher;
+export type WatchOptions = {
+  watchSubtree?: boolean, // default true
+  notifyFilter?: NotifyFilterFlags // default all changes
+};
 ```
 
 ### Format helpers

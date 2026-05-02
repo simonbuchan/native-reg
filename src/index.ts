@@ -1,3 +1,4 @@
+import EventEmitter = require('events');
 const assert = require('assert');
 const types = require('util').types || {
   // approximate polyfill for Node.js < 10
@@ -95,6 +96,22 @@ export enum GetValueFlags {
   // ZEROONFAILURE = 0x20000000, // doesn't make sense here
   SUBKEY_WOW6464KEY = 0x00010000,
   SUBKEY_WOW6432KEY = 0x00020000,
+}
+
+/**
+ * Flags to indicate which changes should be reported when using `watch()`.
+ * @see https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regnotifychangekeyvalue
+ */
+export enum NotifyFilterFlags {
+  /** Notify the caller if a subkey is added or deleted. */
+  REG_NOTIFY_CHANGE_NAME = 0x00000001,
+  /** Notify the caller of changes to the attributes of the key, such as the security descriptor information. */
+  REG_NOTIFY_CHANGE_ATTRIBUTES = 0x00000002,
+  /** Notify the caller of changes to a value of the key. This can include adding or deleting a value, or changing an existing value. */
+  REG_NOTIFY_CHANGE_LAST_SET = 0x00000004,
+  /** Notify the caller of changes to the security descriptor of the key. */
+  REG_NOTIFY_CHANGE_SECURITY = 0x00000008
+  // REG_NOTIFY_THREAD_AGNOSTIC intentionally omitted; not a flag JS should set.
 }
 
 export const HKCR = HKEY.CLASSES_ROOT;
@@ -390,4 +407,79 @@ export function getValue(
 
 export function queryValue(hkey: HKEY, valueName: string | null): ParsedValue | null {
   return parseValue(queryValueRaw(hkey, valueName));
+}
+
+class RegistryWatcher extends EventEmitter<{ change: [] }> {
+  private _native;
+
+  constructor(
+    public readonly hkey: HKEY,
+    public readonly subKey: string,
+    public readonly watchSubtree: boolean,
+    public readonly notifyFilter: NotifyFilterFlags
+  ) {
+    super();
+
+    this._native = native.watch(hkey, subKey, watchSubtree, notifyFilter, () => {
+      this.emit('change');
+    });
+  }
+
+  /**
+   * Stops watching the registry path associated with this instance and frees native resources.
+   */
+  close() {
+    this._native.close();
+  }
+}
+
+export type { RegistryWatcher };
+
+export type WatchOptions = {
+  /**
+   * If this parameter is `true`, the function reports changes in the specified key and its subkeys.
+   * If the parameter is `false`, the function reports changes only in the specified key.
+   * @default true
+   */
+  watchSubtree?: boolean,
+  /**
+   * A value that indicates the changes that should be reported. This parameter can be one or more of the values
+   * in the `NotifyFilterFlags` enum.
+   * @default REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_ATTRIBUTES | REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_SECURITY
+   */
+  notifyFilter?: NotifyFilterFlags
+}
+
+const DEFAULT_NOTIFY_FILTER = NotifyFilterFlags.REG_NOTIFY_CHANGE_NAME
+                            | NotifyFilterFlags.REG_NOTIFY_CHANGE_ATTRIBUTES
+                            | NotifyFilterFlags.REG_NOTIFY_CHANGE_LAST_SET
+                            | NotifyFilterFlags.REG_NOTIFY_CHANGE_SECURITY;
+
+/**
+ * Watches a given key and all of its descendants for changes.  The returned `RegistryWatcher` is an
+ * `EventEmitter` that emits `change` events when any data changes in the key or its children
+ * (unless the `watchSubtree` option is `false`).
+ * 
+ * Due to the way the Windows API (`RegNotifyChangeKeyValue`) works, we only receive a notification that
+ * *something* in the watched tree changed, but not what specifically; therefore the `change` event has no arguments.
+ * 
+ * Note that each watcher starts up a native background thread.  The thread only wakes when changes occur
+ * in the watched registry path, but it necessarily consumes some RAM (roughly 64 kB each).
+ * Call `RegistryWatcher.close()` to stop watching the registry and release resources.
+ * @param hkey The registry root key.
+ * @param subKey The path to the key to be watched.
+ * @param options Optional `WatchOptions` object.
+ * @returns A `RegistryWatcher` instance.
+ */
+export function watch(
+  hkey: HKEY,
+  subKey: string,
+  options?: WatchOptions
+): RegistryWatcher {
+  assert(isWindows);
+  assert(isHKEY(hkey));
+  assert(typeof subKey === 'string');
+  const notifyFilter = typeof options?.notifyFilter === 'number' ? options.notifyFilter : DEFAULT_NOTIFY_FILTER;
+  const watchSubtree = typeof options?.watchSubtree === 'boolean' ? options.watchSubtree : true;
+  return new RegistryWatcher(hkey, subKey, watchSubtree, notifyFilter);
 }

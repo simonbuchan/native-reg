@@ -2,6 +2,8 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <atomic>
+#include <memory>
 #include <vector>
 
 #ifndef NAPI_CPP_EXCEPTIONS
@@ -550,6 +552,104 @@ void closeKey(const CallbackInfo& info) {
     }
 }
 
+class Watcher {
+private:
+    ThreadSafeFunction tsfn;
+    std::thread nativeThread;
+    HKEY hKey = nullptr;
+    HANDLE hEvent = nullptr;
+    HANDLE hStopEvent = nullptr;
+    std::atomic<bool> closed{false};
+    BOOL bWatchSubtree = FALSE;
+    DWORD dwEventFilter = 0;
+
+    LSTATUS RegNotifyChange() {
+        return RegNotifyChangeKeyValue(hKey, bWatchSubtree, dwEventFilter, hEvent, TRUE);
+    }
+
+public:
+    Watcher() = delete;
+    Watcher(const Watcher&) = delete;
+    Watcher& operator=(const Watcher&) = delete;
+
+    Watcher(Napi::Env env, HKEY hkey, std::wstring subKey, BOOL watchSubtree, DWORD eventFilter, Function cb) {
+        hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+        hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        bWatchSubtree = watchSubtree;
+        dwEventFilter = eventFilter & ~REG_NOTIFY_THREAD_AGNOSTIC; // do not allow JS to set this flag
+
+        auto status = RegOpenKeyExW(
+            hkey,
+            subKey.c_str(),
+            0,
+            KEY_NOTIFY | KEY_WOW64_64KEY,
+            &hKey);
+
+        if (status != ERROR_SUCCESS) {
+            CloseHandle(hEvent);
+            CloseHandle(hStopEvent);
+            throw win32_error(env, status, "RegOpenKeyExW");
+        }
+
+        status = RegNotifyChange();
+        if (status != ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            CloseHandle(hEvent);
+            CloseHandle(hStopEvent);
+            throw win32_error(env, status, "RegNotifyChangeKeyValue");
+        }
+
+        tsfn = ThreadSafeFunction::New(env, cb, "native-reg watcher", 0, 1);
+
+        nativeThread = std::thread([this] {
+            auto callback = [](Napi::Env, Function jsCallback) {
+                jsCallback.Call(0, NULL);
+            };
+
+            HANDLE handles[2] = {hStopEvent, hEvent};
+            while (WaitForMultipleObjects(2, handles, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+                if (tsfn.BlockingCall(callback) != napi_ok) break;
+                if (RegNotifyChange() != ERROR_SUCCESS) break;
+            }
+        });
+    }
+
+    ~Watcher() {
+        close();
+    }
+
+    void close() {
+        if (closed.exchange(true)) return;
+        SetEvent(hStopEvent);
+        if (nativeThread.joinable()) {
+            nativeThread.join();
+        }
+        tsfn.Release();
+        if (hKey) { RegCloseKey(hKey); hKey = nullptr; }
+        if (hEvent) { CloseHandle(hEvent); hEvent = nullptr; }
+        if (hStopEvent) { CloseHandle(hStopEvent); hStopEvent = nullptr; }
+    }
+};
+
+Value watch(const CallbackInfo& info) {
+    auto env = info.Env();
+
+    auto hkey = to_hkey(info[0]);
+    auto subKey = to_wstring(info[1]);
+    auto watchSubtree = info[2].As<Boolean>().Value();
+    auto notifyFilter = info[3].As<Number>().Uint32Value();
+    auto cb = info[4].As<Function>();
+
+    auto watcher = std::make_shared<Watcher>(env, hkey, subKey, watchSubtree, notifyFilter, cb);
+
+    auto obj = Object::New(env);
+    obj.Set("close", Function::New(env, [watcher](const CallbackInfo&) {
+        watcher->close();
+    }));
+
+    return obj;
+}
+
 // error handling for functions not called through the C++ wrapper
 #define RAISE_IF_FAILED(env, expr) \
     if (const napi_status status = (expr); status != napi_ok) { \
@@ -620,6 +720,7 @@ napi_value Init(napi_env env, napi_value exports) {
         NAPI_DESCRIPTOR_FUNCTION(deleteKeyValue),
         NAPI_DESCRIPTOR_FUNCTION(deleteValue),
         NAPI_DESCRIPTOR_FUNCTION(closeKey),
+        NAPI_DESCRIPTOR_FUNCTION(watch),
     });
 
     return exports;

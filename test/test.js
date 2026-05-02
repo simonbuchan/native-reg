@@ -231,6 +231,26 @@ suite('with temporary key', () => {
   });
 });
 
+suite('watch', () => {
+  let testKey = null;
+  let watcher = null;
+
+  setup(() => {
+    testKey = reg.createKey(reg.HKCU, testingSubKeyName, reg.Access.ALL_ACCESS);
+  });
+
+  teardown(() => {
+    reg.deleteKey(testKey, testingSubKeyName);
+    watcher.close();
+  });
+
+  test('receives registry change events', done => {
+    watcher = reg.watch(reg.HKCU, testingSubKeyName);
+    watcher.on('change', done);
+    reg.setValueDWORD(testKey, "watched", 1);
+  });
+});
+
 function assertNameList(nameList) {
   assert(Array.isArray(nameList));
   for (const name of nameList) {

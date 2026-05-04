@@ -1,26 +1,26 @@
-const assert = require('assert');
-const types = require('util').types || {
+const assert = require("assert");
+const types = require("util").types || {
   // approximate polyfill for Node.js < 10
   isExternal(x: any): boolean {
-    return Object.prototype.toString.call(x) === '[object Object]';
-  }
+    return Object.prototype.toString.call(x) === "[object Object]";
+  },
 };
 
-const isWindows = process.platform === 'win32';
-const native = isWindows && require('node-gyp-build')(__dirname + "/..");
+const isWindows = process.platform === "win32";
+const native = isWindows && require("node-gyp-build")(__dirname + "/..");
 
 // from winreg.h
 export enum HKEY {
-  CLASSES_ROOT                   = 0x80000000,
-  CURRENT_USER                   = 0x80000001,
-  LOCAL_MACHINE                  = 0x80000002,
-  USERS                          = 0x80000003,
-  PERFORMANCE_DATA               = 0x80000004,
-  PERFORMANCE_TEXT               = 0x80000050,
-  PERFORMANCE_NLSTEXT            = 0x80000060,
-  CURRENT_CONFIG                 = 0x80000005,
-  DYN_DATA                       = 0x80000006,
-  CURRENT_USER_LOCAL_SETTINGS    = 0x80000007,
+  CLASSES_ROOT = 0x80000000,
+  CURRENT_USER = 0x80000001,
+  LOCAL_MACHINE = 0x80000002,
+  USERS = 0x80000003,
+  PERFORMANCE_DATA = 0x80000004,
+  PERFORMANCE_TEXT = 0x80000050,
+  PERFORMANCE_NLSTEXT = 0x80000060,
+  CURRENT_CONFIG = 0x80000005,
+  DYN_DATA = 0x80000006,
+  CURRENT_USER_LOCAL_SETTINGS = 0x80000007,
 }
 
 export enum CreateKeyOptions {
@@ -37,45 +37,45 @@ export enum OpenKeyOptions {
 // from https://docs.microsoft.com/en-nz/windows/desktop/SysInfo/registry-key-security-and-access-rights
 export enum Access {
   // Specific rights
-  QUERY_VALUE         = 0x0001,
-  SET_VALUE           = 0x0002,
-  CREATE_SUB_KEY      = 0x0004,
-  ENUMERATE_SUB_KEYS  = 0x0008,
-  NOTIFY              = 0x0010,
-  CREATE_LINK         = 0x0020,
+  QUERY_VALUE = 0x0001,
+  SET_VALUE = 0x0002,
+  CREATE_SUB_KEY = 0x0004,
+  ENUMERATE_SUB_KEYS = 0x0008,
+  NOTIFY = 0x0010,
+  CREATE_LINK = 0x0020,
 
   // WOW64. See https://docs.microsoft.com/en-nz/windows/desktop/WinProg64/accessing-an-alternate-registry-view
-  WOW64_64KEY         = 0x0100,
-  WOW64_32KEY         = 0x0200,
+  WOW64_64KEY = 0x0100,
+  WOW64_32KEY = 0x0200,
 
   // Standard access rights
-  DELETE              = 0x00010000,
+  DELETE = 0x00010000,
 
   // Generic rights.
-  READ              = 0x2_0019,
-  WRITE             = 0x2_0006,
-  EXECUTE           = READ,
+  READ = 0x2_0019,
+  WRITE = 0x2_0006,
+  EXECUTE = READ,
 
-  ALL_ACCESS        = 0xF_003F,
+  ALL_ACCESS = 0xf_003f,
 }
 
 // from winnt.h
-export enum ValueType  {
-  NONE                       = 0, // No value type
-  SZ                         = 1, // Unicode nul terminated string
-  EXPAND_SZ                  = 2, // Unicode nul terminated string
-                                  // (with environment variable references)
-  BINARY                     = 3, // Free form binary
-  DWORD                      = 4, // 32-bit number
-  DWORD_LITTLE_ENDIAN        = 4, // 32-bit number (same as REG_DWORD)
-  DWORD_BIG_ENDIAN           = 5, // 32-bit number
-  LINK                       = 6, // Symbolic Link (unicode)
-  MULTI_SZ                   = 7, // Multiple Unicode strings
-  RESOURCE_LIST              = 8, // Resource list in the resource map
-  FULL_RESOURCE_DESCRIPTOR   = 9, // Resource list in the hardware description
+export enum ValueType {
+  NONE = 0, // No value type
+  SZ = 1, // Unicode nul terminated string
+  EXPAND_SZ = 2, // Unicode nul terminated string
+  // (with environment variable references)
+  BINARY = 3, // Free form binary
+  DWORD = 4, // 32-bit number
+  DWORD_LITTLE_ENDIAN = 4, // 32-bit number (same as REG_DWORD)
+  DWORD_BIG_ENDIAN = 5, // 32-bit number
+  LINK = 6, // Symbolic Link (unicode)
+  MULTI_SZ = 7, // Multiple Unicode strings
+  RESOURCE_LIST = 8, // Resource list in the resource map
+  FULL_RESOURCE_DESCRIPTOR = 9, // Resource list in the hardware description
   RESOURCE_REQUIREMENTS_LIST = 10,
-  QWORD                      = 11, // 64-bit number
-  QWORD_LITTLE_ENDIAN        = 11, // 64-bit number (same as REG_QWORD)
+  QWORD = 11, // 64-bit number
+  QWORD_LITTLE_ENDIAN = 11, // 64-bit number (same as REG_QWORD)
 }
 
 // From RegGetValue docs
@@ -108,9 +108,7 @@ export function isHKEY(hkey: any): hkey is HKEY {
   assert(isWindows);
   return (
     hkey instanceof native.HKEY ||
-    typeof hkey === "number" &&
-      hkey !== 0 &&
-      hkey === (hkey >>> 0) || // checks value is a positive uint32
+    (typeof hkey === "number" && hkey !== 0 && hkey === hkey >>> 0) || // checks value is a positive uint32
     types.isExternal(hkey)
   );
 }
@@ -125,9 +123,9 @@ export function createKey(
 ): HKEY {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
-  assert(typeof options === 'number');
-  assert(typeof access === 'number');
+  assert(typeof subKey === "string");
+  assert(typeof options === "number");
+  assert(typeof access === "number");
   return native.createKey(hkey, subKey, options, access);
 }
 
@@ -139,22 +137,22 @@ export function openKey(
 ): HKEY | null {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
-  assert(typeof options === 'number');
-  assert(typeof access === 'number');
+  assert(typeof subKey === "string");
+  assert(typeof options === "number");
+  assert(typeof access === "number");
   return native.openKey(hkey, subKey, options, access);
 }
 
 export function openCurrentUser(access: Access = Access.ALL_ACCESS): HKEY {
   assert(isWindows);
-  assert(typeof access === 'number');
+  assert(typeof access === "number");
   return native.openCurrentUser(access);
 }
 
 export function loadAppKey(file: string, access: Access): HKEY | null {
   assert(isWindows);
-  assert(typeof file === 'string');
-  assert(typeof access === 'number');
+  assert(typeof file === "string");
+  assert(typeof access === "number");
   return native.loadAppKey(file, access);
 }
 
@@ -170,10 +168,13 @@ export function enumValueNames(hkey: HKEY): string[] {
   return native.enumValueNames(hkey);
 }
 
-export function queryValueRaw(hkey: HKEY, valueName: string | null): Value | null {
+export function queryValueRaw(
+  hkey: HKEY,
+  valueName: string | null,
+): Value | null {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string' || valueName === null);
+  assert(typeof valueName === "string" || valueName === null);
   return native.queryValue(hkey, valueName || "");
 }
 
@@ -185,9 +186,9 @@ export function getValueRaw(
 ): Value | null {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string' || subKey === null);
-  assert(typeof valueName === 'string' || valueName === null);
-  assert(typeof flags === 'number');
+  assert(typeof subKey === "string" || subKey === null);
+  assert(typeof valueName === "string" || valueName === null);
+  assert(typeof flags === "number");
   if ((flags & GetValueFlags.RT_ANY) === 0) {
     flags |= GetValueFlags.RT_ANY;
   }
@@ -202,24 +203,32 @@ export function setValueRaw(
 ): void {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string' || valueName === null);
-  assert(typeof valueType === 'number');
+  assert(typeof valueName === "string" || valueName === null);
+  assert(typeof valueType === "number");
   assert(Buffer.isBuffer(data));
   native.setValue(hkey, valueName || "", valueType, data);
 }
 
-export function renameKey(hkey: HKEY, subKey: string | null, newSubKey: string): void {
+export function renameKey(
+  hkey: HKEY,
+  subKey: string | null,
+  newSubKey: string,
+): void {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string' || subKey === null);
-  assert(typeof newSubKey === 'string');
+  assert(typeof subKey === "string" || subKey === null);
+  assert(typeof newSubKey === "string");
   return native.renameKey(hkey, subKey || "", newSubKey);
 }
 
-export function copyTree(hkeySrc: HKEY, subKey: string | null, hkeyDest: HKEY): void {
+export function copyTree(
+  hkeySrc: HKEY,
+  subKey: string | null,
+  hkeyDest: HKEY,
+): void {
   assert(isWindows);
   assert(isHKEY(hkeySrc));
-  assert(typeof subKey === 'string' || subKey === null);
+  assert(typeof subKey === "string" || subKey === null);
   assert(isHKEY(hkeyDest));
   return native.copyTree(hkeySrc, subKey || "", hkeyDest);
 }
@@ -227,14 +236,14 @@ export function copyTree(hkeySrc: HKEY, subKey: string | null, hkeyDest: HKEY): 
 export function deleteKey(hkey: HKEY, subKey: string): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
+  assert(typeof subKey === "string");
   return native.deleteKey(hkey, subKey);
 }
 
 export function deleteTree(hkey: HKEY, subKey: string | null): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string' || subKey === null);
+  assert(typeof subKey === "string" || subKey === null);
   return native.deleteTree(hkey, subKey || "");
 }
 
@@ -245,15 +254,15 @@ export function deleteKeyValue(
 ): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof subKey === 'string');
-  assert(typeof valueName === 'string');
+  assert(typeof subKey === "string");
+  assert(typeof valueName === "string");
   return native.deleteKeyValue(hkey, subKey, valueName);
 }
 
 export function deleteValue(hkey: HKEY, valueName: string | null): boolean {
   assert(isWindows);
   assert(isHKEY(hkey));
-  assert(typeof valueName === 'string' || valueName === null);
+  assert(typeof valueName === "string" || valueName === null);
   return native.deleteValue(hkey, valueName || "");
 }
 
@@ -294,7 +303,11 @@ export function parseValue(value: Value | null): ParsedValue | null {
 function trimUcs2Null(value: Buffer) {
   // https://docs.microsoft.com/en-us/windows/desktop/api/Winreg/nf-winreg-regqueryvalueexw
   // Remarks: "The string may not have been stored with the proper terminating null characters"
-  if (value.length >= 2 && value[value.length - 2] === 0 && value[value.length - 1] === 0) {
+  if (
+    value.length >= 2 &&
+    value[value.length - 2] === 0 &&
+    value[value.length - 1] === 0
+  ) {
     value = value.slice(0, -2);
   }
   return value;
@@ -302,21 +315,21 @@ function trimUcs2Null(value: Buffer) {
 
 export function parseString(value: Buffer): string {
   value = trimUcs2Null(value);
-  return value.toString('ucs-2');
+  return value.toString("ucs-2");
 }
 
 export function parseMultiString(value: Buffer) {
   value = trimUcs2Null(value);
   value = trimUcs2Null(value);
-  return value.toString('ucs-2').split('\0');
+  return value.toString("ucs-2").split("\0");
 }
 
 export function formatString(value: string): Buffer {
-  return Buffer.from(value + '\0', 'ucs-2')
+  return Buffer.from(value + "\0", "ucs-2");
 }
 
 export function formatMultiString(values: string[]): Buffer {
-  return Buffer.from(values.join('\0') + '\0\0', 'ucs-2')
+  return Buffer.from(values.join("\0") + "\0\0", "ucs-2");
 }
 
 export function formatDWORD(value: number): Buffer {
@@ -388,6 +401,9 @@ export function getValue(
   return parseValue(getValueRaw(hkey, subKey, valueName, flags));
 }
 
-export function queryValue(hkey: HKEY, valueName: string | null): ParsedValue | null {
+export function queryValue(
+  hkey: HKEY,
+  valueName: string | null,
+): ParsedValue | null {
   return parseValue(queryValueRaw(hkey, valueName));
 }

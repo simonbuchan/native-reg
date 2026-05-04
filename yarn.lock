@@ -753,8 +753,9 @@ __metadata:
     node-addon-api: "npm:8"
     node-gyp-build: "npm:^4.8.4"
     prebuildify: "npm:6"
+    prettier: "npm:^3.8.3"
     rimraf: "npm:5"
-    typescript: "npm:~4.4"
+    typescript: "npm:~6"
   languageName: unknown
   linkType: soft
 
@@ -912,6 +913,15 @@ __metadata:
   bin:
     prebuildify: bin.js
   checksum: 10c0/869a02fefe17ac5263194fa16db903640eeaaf2af68d52957016dbcfff6718cdf7909f3146bb420d39653f06d19edf9770a461226682304f743b9ddbb49c14a3
+  languageName: node
+  linkType: hard
+
+"prettier@npm:^3.8.3":
+  version: 3.8.3
+  resolution: "prettier@npm:3.8.3"
+  bin:
+    prettier: bin/prettier.cjs
+  checksum: 10c0/754816fd7593eb80f6376d7476d463e832c38a12f32775a82683adb6e35b772b1f484d65f19401507b983a8c8a7cd5a4a9f12006bd56491e8f35503473f77473
   languageName: node
   linkType: hard
 
@@ -1178,23 +1188,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:~4.4":
-  version: 4.4.4
-  resolution: "typescript@npm:4.4.4"
+"typescript@npm:~6":
+  version: 6.0.3
+  resolution: "typescript@npm:6.0.3"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/7cd160bbfdf99404238c296db0d56352c7e1d57e367f02640ca36f254f3fa47f74bfc76615e0010c2688a443d9e7403e2d26c79d98ab450d924b17c950732486
+  checksum: 10c0/4a25ff5045b984370f48f196b3a0120779b1b343d40b9a68d114ea5e5fff099809b2bb777576991a63a5cd59cf7bffd96ff6fe10afcefbcb8bd6fb96ad4b6606
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A~4.4#optional!builtin<compat/typescript>":
-  version: 4.4.4
-  resolution: "typescript@patch:typescript@npm%3A4.4.4#optional!builtin<compat/typescript>::version=4.4.4&hash=bbeadb"
+"typescript@patch:typescript@npm%3A~6#optional!builtin<compat/typescript>":
+  version: 6.0.3
+  resolution: "typescript@patch:typescript@npm%3A6.0.3#optional!builtin<compat/typescript>::version=6.0.3&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/5eb1f150ac8d9a1bf79b971dcabe4158e10666d19733a1e9d36ea6b2c9f60e129889fe02c945b7b863d94749f582e633115a9dcb3c607e435246fdecb957dc27
+  checksum: 10c0/2f25c74e65663c248fa1ade2b8459d9ce5372ff9dad07067310f132966ebec1d93f6c42f0baf77a6b6a7a91460463f708e6887013aaade22111037457c6b25df
   languageName: node
   linkType: hard
 

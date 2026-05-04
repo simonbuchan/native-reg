@@ -16,6 +16,7 @@
           }
         ]
       ],
+      "defines": ["NAPI_CPP_EXCEPTIONS"],
       "msvs_settings": {
         "VCCLCompilerTool": {
           "AdditionalOptions": [

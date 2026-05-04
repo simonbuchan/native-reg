@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Changed
+
+- Updated node-addon-api to support modern VS build tools
+
+## Breaking
+
+- The node-addon-api update drops support for old versions
+  of node (e.g. v14, v19). Prebuilds at least should still work.
+
 ## [v1.1.1] - 2022-11-30
 
 ### Fixed

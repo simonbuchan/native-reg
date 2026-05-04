@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+
+- Added new API around `class Key`
+
 ## Changed
 
 - Updated node-addon-api to support modern VS build tools

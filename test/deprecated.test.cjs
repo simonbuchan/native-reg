@@ -1,5 +1,9 @@
 const assert = require('assert').strict;
 
+// We are ESM only now, so we require at least node 20.19.0 (20.17.0 with --experimental-require-module)
+// to be imported with require()
+assert(process.features.require_module);
+
 const reg = require('..');
 
 const testingSubKeyName = 'Software\\native-reg-testing-key';
@@ -8,29 +12,29 @@ suiteSetup(() => {
   reg.deleteTree(reg.HKCU, testingSubKeyName);
 });
 
-suite('predefined HKEYS', () => {
-  suite('isKEY', () => {
-    test('accepts valid', () => {
-      assert(reg.isHKEY(1));
-      assert(reg.isHKEY(reg.HKCU));
-      assert(reg.isHKEY(reg.HKEY.CURRENT_USER));
-    });
-
-    test('rejects invalid', () => {
-      assert(!reg.isHKEY(undefined));
-      assert(!reg.isHKEY('HKCU'));
-      assert(!reg.isHKEY(0));
-      assert(!reg.isHKEY(0.1));
-      assert(!reg.isHKEY(Number.MAX_SAFE_INTEGER));
-      assert(!reg.isHKEY({ native: 1 }));
-
-      class HKEY {
-      }
-
-      assert(!reg.isHKEY(new HKEY()));
-    });
+suite('isHKEY', () => {
+  test('accepts valid', () => {
+    assert(reg.isHKEY(1));
+    assert(reg.isHKEY(reg.HKCU));
+    assert(reg.isHKEY(reg.HKEY.CURRENT_USER));
   });
 
+  test('rejects invalid', () => {
+    assert(!reg.isHKEY(undefined));
+    assert(!reg.isHKEY('HKCU'));
+    assert(!reg.isHKEY(0));
+    assert(!reg.isHKEY(0.1));
+    assert(!reg.isHKEY(Number.MAX_SAFE_INTEGER));
+    assert(!reg.isHKEY({ native: 1 }));
+
+    class HKEY {
+    }
+
+    assert(!reg.isHKEY(new HKEY()));
+  });
+});
+
+suite('predefined HKEYS', () => {
   test('enumKeyNames', () => {
     assertNameList(reg.enumKeyNames(reg.HKCU));
   });

@@ -12,11 +12,15 @@
     "native"
   ],
   "volta": {
-    "node": "20.14.0",
+    "node": "20.20.2",
     "yarn": "4.14.1"
   },
+  "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "exports": {
+    "default": "./lib/index.js"
+  },
   "files": [
     "lib",
     "src",
@@ -32,9 +36,9 @@
     "clean": "rimraf build lib prebuilds",
     "build": "yarn build:js && yarn build:ia32 && yarn build:x64 && yarn build:arm64",
     "build:js": "tsc -p src",
-    "build:ia32": "prebuildify --napi --target node@20.14.0 --arch ia32",
-    "build:x64": "prebuildify --napi --target node@20.14.0 --arch x64",
-    "build:arm64": "prebuildify --napi --target node@20.14.0 --arch arm64",
+    "build:ia32": "prebuildify --napi --target node@20.20.2 --arch ia32",
+    "build:x64": "prebuildify --napi --target node@20.20.2 --arch x64",
+    "build:arm64": "prebuildify --napi --target node@20.20.2 --arch arm64",
     "test": "mocha --ui tdd",
     "format": "prettier -w src",
     "format:check": "prettier src --list-different"

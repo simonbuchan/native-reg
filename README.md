@@ -14,25 +14,25 @@ Contents:
 A simple installer example:
 
 ```js
-const reg = require('native-reg');
+import { Key, Access } from "native-reg";
 
-const key = reg.openKey(
-  reg.HKCU,
-  'Software\\MyCompany\\MySoftware',
-  reg.Access.ALL_ACCESS);
+// If you haven't seen it before, `using` is a version of `const`
+// that calls `[Symbol.dispose]()` on the declared variable when
+// leaving the current scope.
+// You can alternatively use `key.close()` to close it earlier.
+using key = Key.HKCU.open(
+  "Software\\MyCompany\\MySoftware",
+  Access.ALL_ACCESS);
 
-const version = reg.getValue(key, 'Install', 'Version');
+const version = key.getValue('Install', 'Version');
 
 if (isOldVersion(version)) {
-    reg.deleteTree(key, 'Install');
+    key.deleteTree('Install');
     
-    const installKey = reg.createKey(key, 'Install', reg.Access.ALL_ACCESS);
+    using installKey = key.create('Install', Access.ALL_ACCESS);
     reg.setValueSZ(installKey, 'Version', newVersion);
     // ...
-    reg.closeKey(installKey);
 }
-
-reg.closeKey(key);
 ```
 
 ## Comparison to other packages
@@ -84,39 +84,39 @@ Read each API's linked Windows documentation for details on functionality and us
 Contents:
 - [Errors](#errors)
 - [Constants](#constants):
-  - [`HKEY` enum](#hkey-enum)
-    - [Shorthands](#shorthands)
-    - [`isHKEY`](#ishkey)
   - [`Access` enum](#access-enum)
   - [`ValueType` enum](#valuetype-enum)
-- [Raw APIs](#raw-apis):
-  - [`Value` type](#value-type)
-  - [`createKey`](#createkey)
-  - [`openKey`](#openkey)
-  - [`loadAppKey`](#loadappkey)
-  - [`openCurrentUser`](#opencurrentuser)
+- [`Value` type](#value-type)
+- [`isHKEY`](#ishkey)
+- [`Key` type](#key-type)
+  - [predefined constants](#predefined-constants)
+  - [`static openCurrentUser`](#opencurrentuser)
+  - [`static loadAppKey`](#loadappkey)
+  - [`get handle`](#key-handle)
+  - [`create`](#createkey)
+  - [`open`](#openkey)
   - [`enumKeyNames`](#enumkeynames)
   - [`enumValueNames`](#enumvaluenames)
   - [`queryValueRaw`](#queryvalueraw)
+  - [`queryValue`](#queryvalue)
   - [`getValueRaw`](#getvalueraw)
+  - [`getValue`](#getvalue)
   - [`setValueRaw`](#setvalueraw)
+  - [`setValue{Type}`](#setvaluetype)
   - [`renameKey`](#renamekey)
   - [`copyTree`](#copytree)
   - [`deleteKey`](#deletekey)
   - [`deleteTree`](#deletetree)
   - [`deleteKeyValue`](#deletekeyvalue)
   - [`deleteValue`](#deletevalue)
-  - [`closeKey`](#closekey)
+  - [`close`](#closekey)
 - [Format Helpers](#format-helpers)
   - [`parseValue`](#parsevalue)
   - [`parseString`](#parsestring)
   - [`parseMultiString`](#parsemultistring)
   - [`formatDWORD`](#formatdword)
   - [`formatQWORD`](#formatqword)
-- [Formatted value APIs](#formatted-value-apis)
-  - [`setValue{Type}`](#setvaluetype)
-  - [`getValue`](#getvalue)
-  - [`queryValue`](#queryvalue)
+- [Deprecated APIs](#deprecated-apis)
 
 ### Errors
 
@@ -124,8 +124,8 @@ The API initially validates the arguments with the standard node `assert` librar
 
 ```js
 try {
-  // Should not be 'HKLM', but reg.HKLM or reg.HKEY.LOCAL_MACHINE
-  reg.openKey('HKLM', 'SOFTWARE\\Microsoft\\Windows', reg.Access.READ);
+  // Should not be 'READ', but Access.READ
+  Key.HKLM.open('SOFTWARE\\Microsoft\\Windows', 'READ');
   assert.fail();
 } catch (e) {
   assert(e instanceof require('assert').AssertionError);
@@ -142,7 +142,7 @@ you need UAC elevation for:
 ```js
 try {
   // Assuming you are not running as administrator!
-  reg.openKey(reg.HKLM, 'SOFTWARE\\Microsoft\\Windows', reg.Access.ALL_ACCESS);
+  Key.HKLM.open('SOFTWARE\\Microsoft\\Windows', Access.ALL_ACCESS);
   assert.fail();
 } catch (e) {
   assert.strictEqual(e.message, 'Access is denied.');
@@ -154,11 +154,120 @@ try {
 ### Constants
 
 This library uses Typescript `enum`s for constants, this generates a
-two way name <-> value mapping.
+two-way name <-> value mapping.
 
 For example: `Access.SET_VALUE` is `0x0002`, and `Access[2]` is `"SET_VALUE"`.
 
-#### `HKEY` enum
+#### `Access` enum
+
+Specifies desired access rights for opened or created keys. See [documentation](https://docs.microsoft.com/en-nz/windows/desktop/SysInfo/registry-key-security-and-access-rights)
+
+You should generally be ok with the argument defaults of `READ` for [`Key.open()`](#openkey) and `ALL_ACCESS` for [`Key.create()`](#createkey)
+
+```ts
+export enum Access {
+  // Specific rights
+  QUERY_VALUE         = 0x0001,
+  SET_VALUE           = 0x0002,
+  CREATE_SUB_KEY      = 0x0004,
+  ENUMERATE_SUB_KEYS  = 0x0008,
+  NOTIFY              = 0x0010,
+  CREATE_LINK         = 0x0020,
+
+  // WOW64.
+  WOW64_64KEY         = 0x0100,
+  WOW64_32KEY         = 0x0200,
+
+  // Generic rights.
+  READ              = 0x2_0019,
+  WRITE             = 0x2_0006,
+  EXECUTE           = READ,
+
+  ALL_ACCESS        = 0xF_003F,
+}
+```
+
+##### WOW64
+
+The WOW64 values can be combined with other values using the bitwise-or operator `|` to specify that you want to
+override the default 32- or 64-bit key redirection behavior. See [documentation](https://docs.microsoft.com/en-nz/windows/desktop/WinProg64/accessing-an-alternate-registry-view)
+
+Note that not all keys have these "alternate views"
+
+```js
+// Open a the 32-bit view of the key, even in 64-bit NodeJS.
+Key.HKCU.open("Software\\MyCompany\\MySoftware", Access.ALL_ACCESS | Access.WOW64_32KEY)
+```
+
+#### `ValueType` enum
+
+Types for registry values. See [documentation](https://docs.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types).
+
+```ts
+export enum ValueType  {
+  NONE                       = 0, // No value type
+  SZ                         = 1, // Unicode nul terminated string
+  EXPAND_SZ                  = 2, // Unicode nul terminated string
+                                  // (with environment variable references)
+  BINARY                     = 3, // Free form binary
+  DWORD                      = 4, // 32-bit number
+  DWORD_LITTLE_ENDIAN        = 4, // 32-bit number (same as REG_DWORD)
+  DWORD_BIG_ENDIAN           = 5, // 32-bit number
+  LINK                       = 6, // Symbolic Link (unicode)
+  MULTI_SZ                   = 7, // Multiple Unicode strings
+  RESOURCE_LIST              = 8, // Resource list in the resource map
+  FULL_RESOURCE_DESCRIPTOR   = 9, // Resource list in the hardware description
+  RESOURCE_REQUIREMENTS_LIST = 10,
+  QWORD                      = 11, // 64-bit number
+  QWORD_LITTLE_ENDIAN        = 11, // 64-bit number (same as REG_QWORD)
+}
+```
+
+### `Value` type
+
+Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
+are simply Node `Buffer`s with an additional `type` property from `ValueType`:
+
+```ts
+export type Value = Buffer & { type: ValueType };
+```
+
+### `isHKEY`
+
+Helper returns if the argument is a valid-looking `HKEY`. Most APIs will throw
+an assertion error if `hkey` that does not return true for this is used.
+
+Valid HKEY values are,
+* Objects returned from [`Key.create`](#createkey), [`Key.open`](#openkey),
+  [`Key.loadAppKey`](#loadappkey) and [`Key.openCurrentUser`](#opencurrentuser)
+* NodeJS `External` values that represent HKEYs (for example, from another node
+  addon)
+* Positive 32-bit integer values that represent the pointer value of HKEYs
+  (for example, from another node addon) - not that this is unreliable on
+  64-bit applications (as handles are 64-bit there), and should be avoided.
+  * This exists primarily to implement the [predefined constants](#predefined-constants)
+
+```ts
+export function isHKEY(hkey: any): boolean;
+```
+
+### `Key` type
+
+A class wrapping a native windows `HKEY` key handle (exposed as [`handle`](#get-handle))
+
+Most methods fairly directly wrap the Windows API linked in it's section below, only
+abstracting some of the allocation and general usage style.
+
+The exceptions are:
+- [`enumKeyNames`](#enumkeynames) and [`enumValueNames`](#enumvaluenames)
+  which iterate to build a list and only return the names, and not other properties.
+- The non `*Raw` variants to get and set values, which wrap the `*Raw` version with a
+  [format helper](#format-helpers):
+  - [`queryValue`](#queryvalue)
+  - [`getValue`](#getvalue)
+  - [`setValue{Type}`](#setvaluetype)
+ 
+#### Predefined Constants
 
 Exports the set of [predefined `HKEY`s](https://docs.microsoft.com/en-us/windows/win32/sysinfo/predefined-keys).
 
@@ -194,97 +303,6 @@ export const HKCR = HKEY.CLASSES_ROOT;
 export const HKCU = HKEY.CURRENT_USER;
 export const HKLM = HKEY.LOCAL_MACHINE;
 export const HKU = HKEY.USERS;
-```
-
-##### `isHKEY`
-
-Helper returns if the argument is a valid-looking `HKEY`. Most APIs will throw
-an assertion error if `hkey` that does not return true for this is used.
-
-Valid HKEY values are,
-* The values of the [`HKEY` enum](#hkey-enum)
-* Objects returned from [`createKey`](#createkey), [`openKey`](#openkey),
-  [`loadAppKey`](#loadappkey) and [`openCurrentUser`](#opencurrentuser)
-* `External` values that represent HKEYs (for example, from another node
-  addon)
-* Non-`0` 32-bit values that represent the pointer value of HKEYs
-  (for example, from another node addon) - not that this is unreliable on
-  64-bit applications, and should be avoided.
-
-```ts
-export function isHKEY(hkey: any): boolean;
-```
-
-#### `Access` enum
-
-Specifies access checks for opened or created keys. Not always enforced for
-opened keys:
-
-> Certain registry operations perform access checks against the security descriptor of the key, not the access mask specified when the handle to the key was obtained. For example, even if a key is opened with a samDesired of KEY_READ, it can be used to create registry keys if the key's security descriptor permits. In contrast, the RegSetValueEx function specifically requires that the key be opened with the KEY_SET_VALUE access right.
-
-```ts
-// from https://docs.microsoft.com/en-nz/windows/desktop/SysInfo/registry-key-security-and-access-rights
-export enum Access {
-  // Specific rights
-  QUERY_VALUE         = 0x0001,
-  SET_VALUE           = 0x0002,
-  CREATE_SUB_KEY      = 0x0004,
-  ENUMERATE_SUB_KEYS  = 0x0008,
-  NOTIFY              = 0x0010,
-  CREATE_LINK         = 0x0020,
-
-  // WOW64. See https://docs.microsoft.com/en-nz/windows/desktop/WinProg64/accessing-an-alternate-registry-view
-  WOW64_64KEY         = 0x0100,
-  WOW64_32KEY         = 0x0200,
-
-  // Generic rights.
-  READ              = 0x2_0019,
-  WRITE             = 0x2_0006,
-  EXECUTE           = READ,
-
-  ALL_ACCESS        = 0xF_003F,
-}
-```
-
-#### `ValueType` enum
-
-Types for registry values. See [documentation](https://docs.microsoft.com/en-us/windows/win32/sysinfo/registry-value-types).
-
-```ts
-export enum ValueType  {
-  NONE                       = 0, // No value type
-  SZ                         = 1, // Unicode nul terminated string
-  EXPAND_SZ                  = 2, // Unicode nul terminated string
-                                  // (with environment variable references)
-  BINARY                     = 3, // Free form binary
-  DWORD                      = 4, // 32-bit number
-  DWORD_LITTLE_ENDIAN        = 4, // 32-bit number (same as REG_DWORD)
-  DWORD_BIG_ENDIAN           = 5, // 32-bit number
-  LINK                       = 6, // Symbolic Link (unicode)
-  MULTI_SZ                   = 7, // Multiple Unicode strings
-  RESOURCE_LIST              = 8, // Resource list in the resource map
-  FULL_RESOURCE_DESCRIPTOR   = 9, // Resource list in the hardware description
-  RESOURCE_REQUIREMENTS_LIST = 10,
-  QWORD                      = 11, // 64-bit number
-  QWORD_LITTLE_ENDIAN        = 11, // 64-bit number (same as REG_QWORD)
-}
-```
-
-### Raw APIs
-
-These APIs fairly directly wrap the Windows API linked, only abstracting some of
-the allocation and general usage style.
-
-The exception is [`enumKeyNames`](#enumkeynames) and [`enumValueNames`](#enumvaluenames)
-which iterate to build a list and only return the names, and not other properties.
-
-#### `Value` type
-
-Raw registry values returned from [`queryValueRaw`](#queryvalueraw) and [`getValueRaw`](#getvalueraw)
-are simply Node `Buffer`s with an additional `type` property from `ValueType`:
-
-```ts
-export type Value = Buffer & { type: ValueType };
 ```
 
 #### `createKey`
